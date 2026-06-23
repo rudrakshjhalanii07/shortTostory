@@ -1,0 +1,22 @@
+# Dependencies — Docker installs its own via npm ci
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+
+# Compiled output — Docker compiles from source
+apps/*/dist
+packages/*/dist
+
+# Mobile app — not needed in the backend image
+apps/mobile
+
+# Dev / editor artifacts
+.git
+*.md
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db

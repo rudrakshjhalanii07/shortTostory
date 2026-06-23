@@ -1,0 +1,43 @@
+version: '3.9'
+
+services:
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── Backend ──────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: production
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+    env_file:
+      # Copy apps/backend/.env.example → apps/backend/.env and fill in secrets.
+      - path: apps/backend/.env
+        required: false
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+    driver: local

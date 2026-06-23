@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/*
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment / secrets — never commit real config
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Runtime / processing scratch space (downloaded thumbnails, rendered cards)
+tmp/
+.tmp/
+media-cache/
+
+# Native / Expo
+apps/mobile/.expo/
+apps/mobile/ios/Pods/
+apps/mobile/android/.gradle/
+apps/mobile/android/app/build/
+*.ipa
+*.apk
+*.aab
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Test / coverage
+coverage/

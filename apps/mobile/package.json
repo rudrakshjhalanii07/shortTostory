@@ -1,0 +1,9 @@
+{
+  "name": "@shortstory/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ShortStory mobile app — Expo React Native + native share extension. Implemented in Phases 7–9.",
+  "scripts": {
+    "placeholder": "echo \"mobile app is scaffolded in Phase 7\""
+  }
+}

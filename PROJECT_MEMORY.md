@@ -1,0 +1,92 @@
+# Project Memory
+
+Persistent facts about this project. Updated at the end of each phase.
+Each entry states the fact, why it matters, and what it implies for future work.
+
+---
+
+## Product
+
+**ShortStory** generates a branded Instagram Story attribution card from a
+YouTube Short URL. It does **not** download or redistribute the source video
+(Model B / Attribution Card). The card is 1080×1920, credits are burned in with
+ffmpeg, and a tappable link sticker points back to the original Short.
+
+Full compliance rationale: `docs/compliance.md`.
+
+---
+
+## Architecture invariants
+
+- `yt-dlp` and any video-stream download is permanently excluded. If you see it
+  appear as a dependency, remove it immediately.
+- All error codes the mobile client handles must live in `JobErrorCode` in
+  `packages/shared/src/job.ts`, not as local backend strings.
+- `@shortstory/shared` must be rebuilt (`npm run build:shared`) before
+  typechecking `@shortstory/backend` — the backend imports from compiled dist.
+- The monorepo uses **npm workspaces** (not pnpm, not yarn). Package resolution
+  goes through the root `node_modules`.
+- Everything is **ESM** (`"type": "module"`) with `module: NodeNext` in tsconfig.
+  CJS interop via `esModuleInterop: true`. Import paths require `.js` extensions.
+
+---
+
+## Tech decisions
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Deployment | Single Docker server | ffmpeg / BullMQ worker don't fit serverless |
+| Module system | ESM / NodeNext | Repo-wide consistency; no CJS islands |
+| Request logger | Custom pino middleware | pino-http's CJS default breaks NodeNext (ADR-003) |
+| Error envelope | `ApiErrorResponse` from shared | Mobile types all errors without backend knowledge |
+| Env validation | Zod at startup | Fast-fail; readable error on misconfiguration |
+| UUID library | uuid v11+ | v10 has moderate CVE GHSA-w5hq-g745-h8pq |
+| PID 1 in Docker | dumb-init | Node ignores SIGTERM as PID 1 without it |
+| Body limit | 16 KB | Blocks payload-inflation attacks |
+
+---
+
+## Completed phases
+
+| Phase | Summary |
+|---|---|
+| 1 | Monorepo scaffold; `@shortstory/shared` fully typed (DTOs, job state machine, constants) |
+| 2 | Express foundation: config, logging, errors, middleware, health route, Dockerfile, docker-compose |
+| 3 | Redis (ioredis singleton, job store, Redis rate-limit store), BullMQ queue + worker stub, health Redis ping |
+
+---
+
+## Known issues carried forward
+
+| Issue | Carried to |
+|---|---|
+| `YOUTUBE_API_KEY` is optional in Zod schema | Phase 4 (require in production) |
+| Worker processor is a stub | Phase 4–6 (fill in metadata, render, upload) |
+
+---
+
+## File map (key files only)
+
+```
+packages/shared/src/
+  job.ts          JobState, JobErrorCode (including RATE_LIMITED), Job, CardResult
+  metadata.ts     VideoMetadata, MAX_VIDEO_DURATION_SECONDS (90s)
+  api.ts          CreateJobRequest/Response, JobStatusResponse, ApiErrorResponse
+  index.ts        re-exports everything
+
+apps/backend/src/
+  config/index.ts         Zod env validation (REDIS_URL required in production)
+  lib/logger.ts           Pino singleton
+  lib/redis.ts            ioredis singleton (getRedis) + bullMQConnection options
+  lib/jobStore.ts         saveJob / getJob / updateJob (Redis JSON, 24h TTL)
+  types/errors.ts         AppError with isOperational flag
+  middleware/             requestId, requestLogger, errorHandler
+  routes/health.ts        GET /health → { status, version, uptimeSeconds, timestamp, redis }
+  queues/cardQueue.ts     BullMQ Queue<CardJobData>
+  workers/cardWorker.ts   BullMQ Worker stub; advances Job state machine
+  app.ts                  Express factory; rate limiter uses RedisStore
+  server.ts               Graceful shutdown (worker.close + closeRedis + 10s force-exit)
+
+apps/backend/Dockerfile     Multi-stage; build context = repo root; ffmpeg pre-installed
+docker-compose.yml          backend + redis:7-alpine with AOF and health-check ordering
+```
