@@ -42,8 +42,10 @@ COPY apps/backend/package.json     ./apps/backend/
 RUN npm ci --omit=dev
 
 # Copy compiled output — workspace symlinks already point here.
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
-COPY --from=builder /app/apps/backend/dist    ./apps/backend/dist
+COPY --from=builder /app/packages/shared/dist  ./packages/shared/dist
+COPY --from=builder /app/apps/backend/dist     ./apps/backend/dist
+# Font assets are referenced at runtime by cardRenderer (not compiled into dist).
+COPY apps/backend/assets                       ./apps/backend/assets
 
 USER appuser
 
