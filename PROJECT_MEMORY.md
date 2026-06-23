@@ -47,6 +47,9 @@ Full compliance rationale: `docs/compliance.md`.
 | BullMQ connection | `{ url: REDIS_URL }` options object | BullMQ creates its own connections with the correct blocking-command settings; no shared client needed (ADR-007) |
 | Rate-limit store | `rate-limit-redis@4` (not v5) | v5 requires express-rate-limit ≥ 8.5; we use v7. Pinned at v4 (ADR-007) |
 | Job persistence | JSON string at `job:{id}`, 24h TTL | Simpler than Redis hashes for nested types; avoids serialization of optional fields (ADR-007) |
+| HTTPS proxy | Caddy (not nginx) | Auto-provisions Let's Encrypt certs; zero renewal management (ADR-008) |
+| Container registry | ghcr.io | Free with GitHub Actions; uses GITHUB_TOKEN; private by default (ADR-008) |
+| Env isolation | `docker compose --project-name` | Namespaces all Docker resources; simpler than separate VMs at current scale (ADR-008) |
 
 ---
 
@@ -63,14 +66,13 @@ Full compliance rationale: `docs/compliance.md`.
 | 7 | Mobile foundation: Expo SDK 51 scaffold, API client (native fetch, EXPO_PUBLIC_API_URL), useJobPoller hook, three-screen React Navigation stack (Home → Processing → Result) |
 | 8 | Share extension: iOS ShareViewController (validates YouTube Short, fires shortstory://share?url=…), Android intent filters (VIEW + SEND), deep-link handoff via Linking listener + HomeScreen cold/warm-start handling |
 | 9 | Instagram Story sharing: expo-file-system download of pre-signed card URL, instagram-stories://share deep link, Instagram install check, spinner UX, temp-file cleanup |
+| 10 | Production deployment: Docker Compose resource limits + Caddy HTTPS reverse proxy, GitHub Actions CI/CD (typecheck → Docker push → SSH deploy), staging runbook (`docs/staging.md`), MinIO dev profile |
 
 ---
 
 ## Known issues carried forward
 
-| Issue | Carried to |
-|---|---|
-| S3 upload requires live credentials; MinIO via S3_ENDPOINT for local dev | Phase 10 (production hardening) |
+_None. All known issues from prior phases resolved in Phase 10._
 
 ---
 

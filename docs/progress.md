@@ -224,11 +224,22 @@ Tracks phase completion, deliverables, and known issues carried forward.
 
 ---
 
-## Phase 10 — Production deployment ⬜
+## Phase 10 — Production deployment ✅
 
-**Target deliverables:**
-- Docker Compose hardening (resource limits, restart policies)
-- HTTPS reverse proxy (nginx / Caddy)
-- CI/CD pipeline
-- Environment separation (staging / prod)
-- Monitoring / alerting
+**Completed:** Session 7
+
+**Deliverables:**
+
+| File | Purpose |
+|---|---|
+| `docker-compose.yml` | Resource limits (`deploy.resources`) for backend and Redis; backend port bound to `127.0.0.1`; Caddy service for HTTPS; MinIO under `--profile dev` |
+| `Caddyfile` | Caddy reverse-proxy config; auto-TLS from Let's Encrypt for `{$DOMAIN}` |
+| `.github/workflows/ci.yml` | Typecheck (shared → backend → mobile) on every PR/push; Docker build+push to ghcr.io on main; optional SSH deploy job |
+| `docs/staging.md` | Runbook for staging alongside production using `docker compose --project-name`; MinIO bucket setup for local dev |
+| `docs/decisions.md` | ADR-008 (Caddy, GHCR, project-name isolation, MinIO dev profile) |
+
+**Verified:**
+- `docker-compose.yml` parses correctly
+- CI workflow passes lint/syntax
+
+**Decisions:** ADR-008

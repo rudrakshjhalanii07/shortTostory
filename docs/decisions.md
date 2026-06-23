@@ -142,6 +142,39 @@ layer cache is preserved across all subsequent phases.
 
 ---
 
+## ADR-008 — Phase 10 production deployment choices (Caddy, GHCR, Compose project isolation)
+
+**Date:** Phase 10  
+**Status:** Accepted
+
+**Context:** Four decisions made during Phase 10 hardening.
+
+**Caddy over nginx for TLS termination:**  
+Caddy auto-provisions Let's Encrypt certificates with zero manual renewal.
+nginx requires certbot, a cron job, and reload hooks. For a single-server
+deployment the operational simplicity of Caddy outweighs nginx's larger
+ecosystem. If a load balancer or CDN terminates TLS upstream, swap Caddy for
+a plain HTTP reverse proxy at that point.
+
+**GitHub Container Registry (ghcr.io) over Docker Hub:**  
+`ghcr.io` is included in GitHub Actions at no extra cost and uses
+`GITHUB_TOKEN` without additional credentials. Docker Hub requires a separate
+token secret and rate-limits unauthenticated pulls. ghcr.io images are private
+by default (matching the private repo) and can be made public later.
+
+**`docker compose --project-name` for environment isolation:**  
+Running staging and production on the same host with different project names
+keeps all Docker resources (containers, volumes, networks) namespaced. This is
+simpler than maintaining separate compose files or separate VMs for initial
+scale. See `docs/staging.md` for the full runbook.
+
+**MinIO behind a `--profile dev` flag:**  
+The `dev` profile is not activated by default (`docker compose up`), so
+production deployments never start MinIO by accident. Operators opt in
+explicitly with `--profile dev` when they need local S3 testing.
+
+---
+
 ## ADR-007 — Phase 3 implementation choices (ioredis, BullMQ, rate-limit-redis, job storage)
 
 **Date:** Phase 3  

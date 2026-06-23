@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Typecheck ────────────────────────────────────────────────────────────────
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build:shared
+
+      - name: Typecheck backend
+        run: npm run typecheck --workspace @shortstory/backend
+
+      - name: Typecheck mobile
+        run: npm run typecheck --workspace @shortstory/mobile
+
+  # ── Docker build + push ───────────────────────────────────────────────────
+  # Runs on every push to main (not on PRs).
+  # Pushes to GitHub Container Registry:
+  #   ghcr.io/<owner>/<repo>:latest
+  #   ghcr.io/<owner>/<repo>:<sha>
+  docker:
+    name: Docker build & push
+    needs: typecheck
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/backend/Dockerfile
+          target: production
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy ────────────────────────────────────────────────────────────────
+  # Optional: deploys to a VPS via SSH after a successful Docker push.
+  # Requires the following repository secrets to be set:
+  #   DEPLOY_HOST     — IP or hostname of the target server
+  #   DEPLOY_USER     — SSH user (e.g. deploy)
+  #   DEPLOY_SSH_KEY  — PEM-encoded private SSH key
+  #
+  # The server is expected to have docker compose available and the repo
+  # checked out at /opt/shortstory.
+  deploy:
+    name: Deploy to production
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/shortstory
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f

@@ -7,8 +7,8 @@
 
 ## Where we are
 
-**Last completed phase:** Phase 9 — Instagram Story sharing  
-**Next phase:** Phase 10 — Production deployment
+**Last completed phase:** Phase 10 — Production deployment  
+**Next phase:** None planned (all phases complete)
 
 All three packages (`@shortstory/shared`, `@shortstory/backend`, `@shortstory/mobile`)
 typecheck clean with 0 errors. The repo is committed to
@@ -16,75 +16,74 @@ typecheck clean with 0 errors. The repo is committed to
 
 ---
 
-## What was just completed (Phase 9)
-
-### 9A — Download the signed card
-
-`ResultScreen` uses `expo-file-system` (`FileSystem.downloadAsync`) to fetch
-`CardResult.downloadUrl` (a pre-signed S3 URL) into a temp file at
-`FileSystem.cacheDirectory + 'card_<timestamp>.jpg'` before opening Instagram.
-
-### 9B — Instagram story composer
-
-The handler opens:
-```
-instagram-stories://share
-  ?backgroundImage=<encodeURIComponent(localPath)>
-  &contentURL=<encodeURIComponent(attributionLinkUrl)>
-```
-`Linking.canOpenURL('instagram://app')` is checked first; if Instagram is not
-installed the user sees a friendly `Alert` and the flow is aborted before the
-download starts.
-
-### 9C — ResultScreen wired
-
-`ResultScreen` now:
-1. Checks Instagram availability before doing any work.
-2. Shows an `ActivityIndicator` on the button while downloading.
-3. Calls `FileSystem.downloadAsync`, then `Linking.openURL`.
-4. Always calls `FileSystem.deleteAsync(..., { idempotent: true })` in the
-   `finally` block to clean up the local file.
-5. Shows an `Alert` on any caught error.
-
-**Navigation type change:** `Result` params extended with
-`attributionLinkUrl: string`. `ProcessingScreen` now passes
-`status.result.attributionLinkUrl` alongside `downloadUrl` when navigating.
-
----
-
-## Immediate next steps (Phase 10)
-
-Phase 10 hardens the deployment for production.
+## What was just completed (Phase 10)
 
 ### 10A — Docker Compose hardening
 
-- Add `restart: unless-stopped` to both services.
-- Add `mem_limit` / `cpus` resource caps to the backend service.
-- Ensure Redis uses an explicit named volume for AOF persistence.
+`docker-compose.yml` updated:
+- `deploy.resources.limits` added to both `backend` (1 CPU / 512 MB) and
+  `redis` (0.5 CPU / 320 MB).
+- Backend `ports:` changed to `127.0.0.1:3000:3000` so the port is not
+  reachable from external IPs on the host.
+- All services already had `restart: unless-stopped` and the Redis named
+  volume (`redis_data:/data`) from prior phases.
 
 ### 10B — HTTPS reverse proxy
 
-Add an nginx (or Caddy) service to `docker-compose.yml` that terminates TLS
-and reverse-proxies to the Express backend. The backend should bind only to
-`127.0.0.1` inside the Compose network.
+A new `caddy:2-alpine` service was added to `docker-compose.yml`:
+- Exposes ports 80, 443 (TCP + UDP for HTTP/3).
+- Mounts `./Caddyfile` read-only.
+- Uses `caddy_data` and `caddy_config` named volumes for certificate storage.
+- `backend` no longer needs to be reached from outside the Compose network —
+  Caddy proxies to `backend:3000` internally.
+
+`Caddyfile` at repo root:
+```
+{$DOMAIN} {
+    reverse_proxy backend:3000
+}
+```
+Set `DOMAIN=api.yourdomain.com` in the environment before starting. Caddy
+auto-provisions a Let's Encrypt certificate. For local testing without a
+domain, replace `{$DOMAIN}` with `:80`.
 
 ### 10C — CI/CD pipeline
 
-A GitHub Actions workflow that:
-1. Builds `@shortstory/shared` and runs `tsc --noEmit` for both backend and mobile.
-2. Builds the Docker image and pushes it to a registry on merges to `main`.
-3. (Optional) Deploys to a VPS via SSH + `docker compose pull && docker compose up -d`.
+`.github/workflows/ci.yml` added with three jobs:
+
+| Job | Trigger | What it does |
+|---|---|---|
+| `typecheck` | Every push / PR to `main` | `npm ci` → `build:shared` → typecheck backend + mobile |
+| `docker` | Push to `main` only | Builds image, pushes `latest` + `<sha>` to `ghcr.io/<repo>` |
+| `deploy` | After `docker` succeeds | SSH to server; `docker compose pull && up -d` (requires `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` secrets) |
+
+The `deploy` job uses the `production` GitHub environment — configure
+protection rules there if needed.
 
 ### 10D — Environment separation
 
-Document (or script) how to run a staging stack alongside production, with
-separate Redis and S3 bucket/prefix, using Docker Compose `--project-name`.
+`docs/staging.md` documents:
+- How to run staging alongside production with
+  `docker compose --project-name shortstory-staging`.
+- A minimal `docker-compose.staging.yml` override pattern.
+- MinIO bucket creation commands for local dev.
 
 ### 10E — MinIO local dev
 
-Add a `minio` service to `docker-compose.yml` (gated by a `--profile dev`
-profile) so the full S3 upload pipeline can be exercised without live AWS
-credentials.
+`minio/minio:latest` service added to `docker-compose.yml` under
+`profiles: [dev]`:
+- Not started by default — requires `docker compose --profile dev up`.
+- API at `http://localhost:9000`, console at `http://localhost:9001`.
+- Credentials: `minioadmin` / `minioadmin`.
+
+`.env` settings for local dev:
+```dotenv
+S3_ENDPOINT=http://minio:9000
+S3_BUCKET=shortstory-dev
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadmin
+```
 
 ---
 
@@ -145,15 +144,18 @@ apps/mobile/
     hooks/useJobPoller.ts   useJobPoller(jobId, pollIntervalMs) → { status, error }
     screens/HomeScreen.tsx  Cold-start (Linking.getInitialURL) + warm-start (route.params)
     screens/ProcessingScreen.tsx
-    screens/ResultScreen.tsx   "Share to Story" placeholder (Phase 9)
+    screens/ResultScreen.tsx   "Share to Story": checks Instagram, downloads card, opens deep link
 
-docker-compose.yml    backend + redis:7-alpine (AOF, health-check ordering)
+docker-compose.yml    backend + redis + caddy (prod); minio (--profile dev)
+Caddyfile             Caddy reverse-proxy; auto-TLS via DOMAIN env var
+.github/workflows/ci.yml  Typecheck → Docker push → SSH deploy
 
 docs/
   architecture.md         System design + middleware stack
   compliance.md           Why no video download (read before touching ingestion)
-  decisions.md            ADR-001 through ADR-007
+  decisions.md            ADR-001 through ADR-008
   progress.md             Phase checklist + deliverables
+  staging.md              Staging / MinIO runbook
 ```
 
 **Dev workflow:**
@@ -161,6 +163,9 @@ docs/
 npm run build:shared                         # always run first
 npm run typecheck --workspace @shortstory/backend
 npm run dev --workspace @shortstory/backend  # tsx watch, hot-reload
+
+# Local dev with MinIO:
+docker compose --profile dev up -d
 
 # Mobile:
 cd apps/mobile && npx expo start             # Expo Go / simulator

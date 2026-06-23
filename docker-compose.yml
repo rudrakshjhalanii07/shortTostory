@@ -6,8 +6,6 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    ports:
-      - '6379:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -16,6 +14,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 320M
 
   # ── Backend ──────────────────────────────────────────────────────────────────
   backend:
@@ -24,8 +27,12 @@ services:
       dockerfile: apps/backend/Dockerfile
       target: production
     restart: unless-stopped
+    expose:
+      - '3000'
+    # Bind to loopback only so the port is not reachable from external IPs on
+    # the host. Caddy handles all inbound HTTPS traffic.
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -37,7 +44,64 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+
+  # ── Caddy (HTTPS reverse proxy) ───────────────────────────────────────────
+  # Set DOMAIN= in the environment or apps/backend/.env before starting.
+  # Caddy auto-provisions a Let's Encrypt certificate for that domain.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+  # ── MinIO (local S3 substitute — dev profile only) ────────────────────────
+  # Start with: docker compose --profile dev up
+  # API endpoint: http://localhost:9000
+  # Console:      http://localhost:9001   (minioadmin / minioadmin)
+  # Add to apps/backend/.env:
+  #   S3_ENDPOINT=http://localhost:9000
+  #   S3_BUCKET=shortstory-dev
+  #   S3_ACCESS_KEY_ID=minioadmin
+  #   S3_SECRET_ACCESS_KEY=minioadmin
+  minio:
+    image: minio/minio:latest
+    profiles: [dev]
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   redis_data:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+  minio_data:
     driver: local
