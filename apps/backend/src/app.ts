@@ -10,9 +10,17 @@ import { requestId } from './middleware/requestId.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { healthRouter } from './routes/health.js';
-import { jobsRouter } from './routes/jobs.js';
+import { createJobsRouter } from './routes/jobs.js';
+import { UPLOADS_DIR } from './lib/uploader/index.js';
+import type { IJobStore } from './lib/jobStore/index.js';
+import type { IJobQueue } from './queues/index.js';
 
-export function createApp(): express.Application {
+export interface AppDeps {
+  jobStore: IJobStore;
+  jobQueue: IJobQueue;
+}
+
+export function createApp({ jobStore, jobQueue }: AppDeps): express.Application {
   const app = express();
 
   app.use(helmet());
@@ -23,13 +31,21 @@ export function createApp(): express.Application {
       : config.CORS_ORIGINS.split(',').map((o) => o.trim());
   app.use(cors({ origin: allowedOrigins }));
 
-  // Required so express-rate-limit reads the real client IP behind a proxy.
   app.set('trust proxy', 1);
 
-  // Sets req.id — must run before rate limiter and logger.
   app.use(requestId);
-
   app.use(requestLogger);
+
+  // In bullmq mode Redis is available, so use it as the rate-limit store to
+  // keep counters consistent across potential restarts/replicas.
+  // In inline mode fall back to the default in-memory store.
+  const redisRateLimitStore =
+    config.QUEUE_MODE === 'bullmq'
+      ? new RedisStore({
+          sendCommand: (...args: string[]) =>
+            (getRedis() as unknown as { call(...a: string[]): Promise<RedisReply> }).call(...args),
+        })
+      : undefined;
 
   app.use(
     rateLimit({
@@ -37,11 +53,7 @@ export function createApp(): express.Application {
       max: config.RATE_LIMIT_MAX,
       standardHeaders: true,
       legacyHeaders: false,
-      // ioredis exposes call() at runtime but omits it from its public type declarations.
-      store: new RedisStore({
-        sendCommand: (...args: string[]) =>
-          (getRedis() as unknown as { call(...a: string[]): Promise<RedisReply> }).call(...args),
-      }),
+      ...(redisRateLimitStore ? { store: redisRateLimitStore } : {}),
       handler: (req, res) => {
         const body: ApiErrorResponse = {
           error: {
@@ -55,15 +67,17 @@ export function createApp(): express.Application {
     }),
   );
 
-  // Limit body size to block trivial payload-inflation attacks.
   app.use(express.json({ limit: '16kb' }));
 
-  // Routes — health is mounted at both / and /api/v1 for flexibility.
+  // Serve rendered cards directly when running without S3 (local/dev mode).
+  if (!config.S3_BUCKET) {
+    app.use('/uploads', express.static(UPLOADS_DIR));
+  }
+
   app.use(healthRouter);
   app.use(API_BASE_PATH, healthRouter);
-  app.use(API_BASE_PATH, jobsRouter);
+  app.use(API_BASE_PATH, createJobsRouter(jobStore, jobQueue));
 
-  // 404 — must come after all real routes.
   app.use((req, res) => {
     const body: ApiErrorResponse = {
       error: {
@@ -79,5 +93,3 @@ export function createApp(): express.Application {
 
   return app;
 }
-
-export const app = createApp();

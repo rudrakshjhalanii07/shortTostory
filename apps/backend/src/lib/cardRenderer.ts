@@ -19,9 +19,10 @@ const BG = '0x0F0F0F';
 
 // Thumbnail placement: 96 px margin each side, starting 160 px from top
 const THUMB_W = W - 192; // 888 px
+const THUMB_H = 498;      // even number — ffmpeg may round 499 up to 500 for 4:3 sources
 const THUMB_Y = 160;
 
-// Text block starts below the thumbnail. Thumbnail is at most 888×499 (16:9).
+// Text block starts below the thumbnail.
 const TEXT_X = 72;
 const TEXT_WRAP_W = W - 144; // characters are ~18 px each at size 32
 
@@ -75,9 +76,7 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
   const handleLine = truncate(metadata.creatorHandle, 42);
   const titleLine = truncate(metadata.title, 44);
 
-  // Thumbnail occupies the top portion; text starts at a fixed y below it.
-  // Use 740 as a safe lower bound for the thumbnail area (888×499 at 16:9).
-  const textStartY = THUMB_Y + 499 + 60; // ~719 — below thumbnail + gap
+  const textStartY = THUMB_Y + THUMB_H + 60;
 
   const y0 = textStartY;        // channel title
   const y1 = y0 + 52;           // creator handle
@@ -87,9 +86,11 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
 
   // Build filter_complex
   const filters: string[] = [
-    // Scale thumbnail to fill THUMB_W, maintain aspect, then pad height if < 499
-    `[1:v]scale=${THUMB_W}:-2:force_original_aspect_ratio=decrease,` +
-      `pad=${THUMB_W}:499:(ow-iw)/2:(oh-ih)/2:color=${BG}[thumb]`,
+    // Scale thumbnail to fit within THUMB_W×THUMB_H (handles any aspect ratio),
+    // then pad to exactly THUMB_W×THUMB_H so the overlay geometry is predictable.
+    // THUMB_H is even so ffmpeg never rounds the scaled height above the pad target.
+    `[1:v]scale=${THUMB_W}:${THUMB_H}:force_original_aspect_ratio=decrease,` +
+      `pad=${THUMB_W}:${THUMB_H}:(ow-iw)/2:(oh-ih)/2:color=${BG}[thumb]`,
 
     // Overlay thumbnail centered horizontally, THUMB_Y from top
     `[0:v][thumb]overlay=x=(W-w)/2:y=${THUMB_Y}[bg0]`,
