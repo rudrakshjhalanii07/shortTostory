@@ -59,16 +59,6 @@ if (effectiveQueueMode === 'bullmq' && !parsed.data.REDIS_URL) {
   process.exit(1);
 }
 
-if (parsed.data.NODE_ENV === 'production' && effectiveQueueMode !== 'bullmq') {
-  console.error('[config] NODE_ENV=production requires QUEUE_MODE=bullmq (and REDIS_URL)');
-  process.exit(1);
-}
-
-if (parsed.data.NODE_ENV === 'production' && !parsed.data.REDIS_URL) {
-  console.error('[config] REDIS_URL is required in production');
-  process.exit(1);
-}
-
 if (parsed.data.NODE_ENV === 'production' && !parsed.data.YOUTUBE_API_KEY) {
   console.error('[config] YOUTUBE_API_KEY is required in production');
   process.exit(1);
