@@ -108,13 +108,25 @@ Tracks phase completion, deliverables, and known issues carried forward.
 
 ---
 
-## Phase 5 — ffmpeg card pipeline ⬜
+## Phase 5 — ffmpeg card pipeline ✅
 
-**Target deliverables:**
-- Thumbnail downloader
-- ffmpeg card renderer (1080×1920, credits burned in)
-- S3 upload + signed URL generation
-- Card template system
+**Completed:** Session 3
+
+**Deliverables:**
+
+| File | Purpose |
+|---|---|
+| `src/lib/thumbnail.ts` | `downloadThumbnail()` — fetch thumbnail URL to temp file via native fetch |
+| `src/lib/cardRenderer.ts` | `renderCard()` — ffmpeg 1080×1920 JPEG; dark bg, thumbnail inset, drawtext overlays for channel/handle/title/views/CTA |
+| `apps/backend/assets/fonts/` | Inter Regular + Bold TTFs (Inter v4.0, SIL OFL license) — bundled for cross-platform consistency |
+| `apps/backend/Dockerfile` | Production stage now copies `assets/` so fonts are available at runtime |
+| `src/workers/cardWorker.ts` | Full pipeline wired: metadata → thumbnail download → render → progress at 33/66/90 % |
+
+**Verified:**
+- `npm run build:shared && npm run typecheck --workspace @shortstory/backend` — 0 errors
+
+**Known issues / carried forward:**
+- Card is rendered but immediately cleaned up (no upload target yet) — Phase 6 adds S3 upload.
 
 ---
 

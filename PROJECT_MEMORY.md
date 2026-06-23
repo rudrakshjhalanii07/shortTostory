@@ -58,6 +58,7 @@ Full compliance rationale: `docs/compliance.md`.
 | 2 | Express foundation: config, logging, errors, middleware, health route, Dockerfile, docker-compose |
 | 3 | Redis (ioredis singleton, job store, Redis rate-limit store), BullMQ queue + worker stub, health Redis ping |
 | 4 | YouTube Data API v3 integration: URL extractor, metadata client (videos.list + channels.list), worker stub replaced with real fetch |
+| 5 | ffmpeg card pipeline: thumbnail downloader, 1080×1920 JPEG renderer with drawtext overlays, bundled Inter fonts, Dockerfile updated to include assets/ |
 
 ---
 
@@ -65,7 +66,7 @@ Full compliance rationale: `docs/compliance.md`.
 
 | Issue | Carried to |
 |---|---|
-| Worker halts at `downloading_thumbnail` (33 %) | Phase 5 (thumbnail download + ffmpeg render) |
+| Card rendered but not uploaded (cleaned up immediately) | Phase 6 (S3 upload + signed URL) |
 
 ---
 
@@ -85,6 +86,8 @@ apps/backend/src/
   lib/jobStore.ts         saveJob / getJob / updateJob (Redis JSON, 24h TTL)
   lib/youtubeUrl.ts       extractVideoId() — Shorts/youtu.be/watch URL → 11-char ID or null
   lib/youtubeClient.ts    fetchVideoMetadata() — YouTube Data API v3 (videos.list + channels.list)
+  lib/thumbnail.ts        downloadThumbnail() — fetch to tmp file, returns path
+  lib/cardRenderer.ts     renderCard() — ffmpeg 1080×1920 JPEG with Inter font overlays
   types/errors.ts         AppError with isOperational flag
   middleware/             requestId, requestLogger, errorHandler
   routes/health.ts        GET /health → { status, version, uptimeSeconds, timestamp, redis }
