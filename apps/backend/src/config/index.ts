@@ -84,8 +84,7 @@ if (parsed.data.NODE_ENV === 'production') {
   const hasS3 = s3Required.every((k) => parsed.data[k]);
   const hasLocal = !!parsed.data.PUBLIC_URL;
   if (!hasS3 && !hasLocal) {
-    console.error('[config] Production requires either full S3 config or PUBLIC_URL (for local storage)');
-    process.exit(1);
+    console.warn('[config] WARNING: No S3 config and no PUBLIC_URL set — card download URLs will be broken until PUBLIC_URL is added');
   }
   if (hasS3) {
     for (const key of s3Required) {
