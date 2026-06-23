@@ -45,6 +45,21 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.YOUTUBE_API_KEY) {
   process.exit(1);
 }
 
+const s3Required: Array<keyof typeof parsed.data> = [
+  'S3_BUCKET',
+  'S3_REGION',
+  'S3_ACCESS_KEY_ID',
+  'S3_SECRET_ACCESS_KEY',
+];
+if (parsed.data.NODE_ENV === 'production') {
+  for (const key of s3Required) {
+    if (!parsed.data[key]) {
+      console.error(`[config] ${key} is required in production`);
+      process.exit(1);
+    }
+  }
+}
+
 const result = parsed;
 
 export const config = result.data;

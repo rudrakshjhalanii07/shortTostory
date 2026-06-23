@@ -12,6 +12,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
+    "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "@shortstory/shared": "*",
     "bullmq": "^5.79.1",
     "cors": "^2.8.5",

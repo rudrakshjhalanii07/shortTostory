@@ -1,4 +1,4 @@
-import type { Job, JobError, JobProgress, JobState } from '@shortstory/shared';
+import type { Job, JobError, JobProgress, JobState, CardResult } from '@shortstory/shared';
 import type { VideoMetadata } from '@shortstory/shared';
 import { getRedis } from './redis.js';
 
@@ -22,6 +22,7 @@ export interface JobUpdate {
   state?: JobState;
   progress?: JobProgress;
   metadata?: VideoMetadata;
+  result?: CardResult;
   error?: JobError;
 }
 
@@ -40,13 +41,13 @@ export async function updateJob(id: string, update: JobUpdate): Promise<void> {
 
   const progress = update.progress ?? job.progress;
   const metadata = update.metadata ?? job.metadata;
+  const result = update.result ?? job.result;
   const error = update.error ?? job.error;
 
   if (progress !== undefined) merged['progress'] = progress;
   if (metadata !== undefined) merged['metadata'] = metadata;
+  if (result !== undefined) merged['result'] = result;
   if (error !== undefined) merged['error'] = error;
-  // result is only set by the Phase 6 upload step — not overwritten here.
-  if (job.result !== undefined) merged['result'] = job.result;
 
   await saveJob(merged as unknown as Job);
 }

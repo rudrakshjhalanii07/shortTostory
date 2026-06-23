@@ -10,6 +10,7 @@ import { requestId } from './middleware/requestId.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { healthRouter } from './routes/health.js';
+import { jobsRouter } from './routes/jobs.js';
 
 export function createApp(): express.Application {
   const app = express();
@@ -60,6 +61,7 @@ export function createApp(): express.Application {
   // Routes — health is mounted at both / and /api/v1 for flexibility.
   app.use(healthRouter);
   app.use(API_BASE_PATH, healthRouter);
+  app.use(API_BASE_PATH, jobsRouter);
 
   // 404 — must come after all real routes.
   app.use((req, res) => {

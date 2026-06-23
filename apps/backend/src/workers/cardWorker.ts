@@ -7,6 +7,7 @@ import { extractVideoId } from '../lib/youtubeUrl.js';
 import { fetchVideoMetadata } from '../lib/youtubeClient.js';
 import { downloadThumbnail } from '../lib/thumbnail.js';
 import { renderCard } from '../lib/cardRenderer.js';
+import { uploadCard } from '../lib/s3Uploader.js';
 import { AppError } from '../types/errors.js';
 import type { CardJobData } from '../queues/cardQueue.js';
 import type { JobErrorCode } from '@shortstory/shared';
@@ -26,6 +27,7 @@ async function processCard(bullJob: BullJob<CardJobData>): Promise<void> {
 
   let thumbnailPath: string | undefined;
   let cardPath: string | undefined;
+  let uploadDone = false;
 
   try {
     // 1. Extract video ID — throws INVALID_URL on null.
@@ -51,7 +53,20 @@ async function processCard(bullJob: BullJob<CardJobData>): Promise<void> {
       progress: { stage: 'uploading_result', percent: 90 },
     });
 
-    // TODO(phase-6): upload cardPath to S3, set result on job, delete cardPath
+    // Upload card to S3, persist result, delete local temp file.
+    const upload = await uploadCard(cardPath, jobId);
+    uploadDone = true;
+    await updateJob(jobId, {
+      state: 'completed',
+      result: {
+        downloadUrl: upload.downloadUrl,
+        contentType: 'image/jpeg',
+        expiresAt: upload.expiresAt,
+        attributionLinkUrl: metadata.shortUrl,
+        width: 1080,
+        height: 1920,
+      },
+    });
   } catch (err) {
     // Map AppError → JobErrorCode; collapse anything else to INTERNAL.
     let code: JobErrorCode = 'INTERNAL';
@@ -67,9 +82,8 @@ async function processCard(bullJob: BullJob<CardJobData>): Promise<void> {
     throw err;
   } finally {
     await cleanupFile(thumbnailPath);
-    // Card file is kept until Phase 6 uploads it; only clean up on failure.
-    // (If cardPath is set and we reached the finally via an error, clean it too.)
-    if (cardPath) {
+    // uploadCard deletes the card file on success; clean up here only on failure.
+    if (!uploadDone && cardPath) {
       await cleanupFile(cardPath);
     }
   }
