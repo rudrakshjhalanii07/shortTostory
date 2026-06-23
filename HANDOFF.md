@@ -7,121 +7,93 @@
 
 ## Where we are
 
-**Last completed phase:** Phase 6 — REST API + S3 upload  
-**Next phase:** Phase 7 — Mobile foundation (Expo project, API client, polling, basic UI)
+**Last completed phase:** Phase 7 — Mobile foundation  
+**Next phase:** Phase 8 — Share extension (iOS share extension + Android intent filter)
 
-Both `@shortstory/shared` and `@shortstory/backend` typecheck clean with 0
-errors. The repo is committed to
+Both `@shortstory/shared`, `@shortstory/backend`, and `@shortstory/mobile`
+typecheck clean with 0 errors. The repo is committed to
 `https://github.com/rudrakshjhalanii07/shortTostory` (private, main branch).
 
 ---
 
-## What was just completed (Phase 6)
-
-### 6A — `src/lib/s3Uploader.ts`
-
-`uploadCard(cardPath, jobId) → UploadResult`:
-- Reads the card file into memory with `readFile`, sends via `PutObjectCommand`
-  (`Content-Type: image/jpeg`, key `cards/{jobId}.jpg`).
-- Pre-signs a `GetObjectCommand` with `SIGNED_URL_TTL_SECONDS` (default 3600).
-- Deletes the local temp file after a successful upload.
-- On any AWS SDK error, throws `AppError.internal()`.
-- Uses `S3ClientConfig` for type-safe client construction under `exactOptionalPropertyTypes`.
-- `S3_ENDPOINT` + `forcePathStyle: true` wired for MinIO/Localstack in dev.
-
-### 6B — `src/routes/jobs.ts`
-
-Two endpoints mounted at `API_BASE_PATH` (`/api/v1`):
-
-**`POST /api/v1/jobs`**
-1. Zod parse of `{ url: string }` → `AppError.badRequest()` on invalid shape.
-2. `extractVideoId(url)` → `AppError.invalidUrl()` on null.
-3. `saveJob` (uuid v4, state `queued`, `createdAt`/`updatedAt` ISO strings).
-4. `cardQueue.add('card', { jobId, sourceUrl })`.
-5. Returns `201` with `CreateJobResponse { jobId, state: 'queued', pollIntervalMs: 2000 }`.
-
-**`GET /api/v1/jobs/:id`**
-1. `getJob(id)` → `AppError.notFound()` if null.
-2. Returns `200` with `toJobStatusResponse(job)`.
-
-### 6C — Worker wired
-
-`cardWorker.ts` now calls `uploadCard(cardPath, jobId)` after render,
-persists `CardResult` via `updateJob`, and uses `uploadDone` flag so the
-`finally` block only cleans up the card temp file on failure (not on success,
-since `uploadCard` already deleted it).
-
-### 6D — Config guards
-
-`S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` all
-required in production; server exits with a clear message if any is absent.
-
----
-
-## Immediate next steps (Phase 7)
-
-Phase 7 is the mobile foundation. The backend API is now fully functional;
-the mobile app needs to be scaffolded to talk to it.
+## What was just completed (Phase 7)
 
 ### 7A — Expo project scaffold
 
-```bash
-npx create-expo-app apps/mobile --template blank-typescript
-```
+`apps/mobile/` is now a full Expo SDK 51 project (React Native 0.74). Key
+config files:
 
-- Target: iOS first, Android parity later.
-- Use Expo SDK 51+ (React Native 0.74+).
-- Remove the default `App.tsx` content; replace with the shell below.
+- `package.json` — Expo SDK 51, React Navigation native-stack,
+  `@shortstory/shared: "*"` workspace dep, `main: node_modules/expo/AppEntry.js`
+- `app.json` — Expo slug `shortstory`, portrait orientation, iOS bundle ID
+  `com.shortstory.app`
+- `tsconfig.json` — `moduleResolution: bundler`, `jsx: react-jsx`, `paths`
+  pointing `@shortstory/shared` at the compiled dist for type checking
+- `babel.config.js` — `babel-preset-expo`
+- `metro.config.js` — `watchFolders: [monorepoRoot]`,
+  `nodeModulesPaths: [appRoot/node_modules, monorepoRoot/node_modules]`
 
-### 7B — API client (`apps/mobile/src/api/client.ts`)
+### 7B — API client (`src/api/client.ts`)
 
-Typed wrapper around the backend REST API using `@shortstory/shared` DTOs.
-No external HTTP library needed — native `fetch` is available in RN 0.71+.
+Typed wrapper over native `fetch`:
 
-```ts
-import type {
-  CreateJobRequest,
-  CreateJobResponse,
-  JobStatusResponse,
-} from '@shortstory/shared';
+- `BASE_URL` reads `process.env.EXPO_PUBLIC_API_URL` (fallback: `http://localhost:3000`).
+- `createJob(url)` → `POST /api/v1/jobs` → `CreateJobResponse`
+- `getJobStatus(jobId)` → `GET /api/v1/jobs/:id` → `JobStatusResponse`
+- Non-2xx: parses `ApiErrorResponse.error.message`, throws `Error`.
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
-
-export async function createJob(url: string): Promise<CreateJobResponse> { ... }
-export async function getJobStatus(jobId: string): Promise<JobStatusResponse> { ... }
-```
-
-Use `EXPO_PUBLIC_API_URL` so it can be overridden at build time without code
-changes (Expo's equivalent of `NEXT_PUBLIC_`).
-
-### 7C — Polling hook (`apps/mobile/src/hooks/useJobPoller.ts`)
+### 7C — Polling hook (`src/hooks/useJobPoller.ts`)
 
 ```ts
-export function useJobPoller(jobId: string | null): {
-  status: JobStatusResponse | null;
-  error: string | null;
-}
+useJobPoller(jobId: string | null, pollIntervalMs = 2000)
+  → { status: JobStatusResponse | null; error: string | null }
 ```
 
-- Polls `getJobStatus` every `pollIntervalMs` ms (from `CreateJobResponse`).
-- Stops polling when `state === 'completed' || state === 'failed'`.
-- Clears the interval on unmount.
-- Surfaces errors to the caller.
+- Fires an immediate poll on mount, then every `pollIntervalMs` ms.
+- Stops (clears interval) when `state === 'completed' | 'failed'`.
+- Also stops on network errors, surfacing them via `error`.
+- Cleans up on unmount.
 
-### 7D — Basic UI shell
+### 7D — Three-screen UI
 
-Three screens (React Navigation stack, or Expo Router — pick one and stick
-with it):
+React Navigation native-stack (`NavigationContainer` in `App.tsx`):
 
-1. **HomeScreen** — single text field + "Generate" button. Accepts a YouTube
-   URL. On submit, calls `createJob`, then navigates to `ProcessingScreen`.
+| Screen | Route params | Behaviour |
+|---|---|---|
+| `HomeScreen` | — | TextInput + Generate button; calls `createJob`; navigates to `Processing` |
+| `ProcessingScreen` | `{ jobId, pollIntervalMs }` | `useJobPoller`; shows `JobProgress.stage` (human label) + percent; `replace('Result')` on complete; shows error on fail. Back gesture disabled. |
+| `ResultScreen` | `{ downloadUrl }` | `Image` from signed URL; disabled "Share to Story" button (Phase 9) |
 
-2. **ProcessingScreen** — shows `JobProgress.stage` and `JobProgress.percent`.
-   Uses `useJobPoller`. On `completed`, navigates to `ResultScreen`. On
-   `failed`, shows the `JobError.message`.
+---
 
-3. **ResultScreen** — shows the card image fetched from `CardResult.downloadUrl`.
-   Placeholder "Share to Story" button (wired in Phase 9).
+## Immediate next steps (Phase 8)
+
+Phase 8 wires up the iOS share extension and Android intent filter so users can
+send a YouTube Short directly from the native share sheet.
+
+### 8A — iOS share extension
+
+- `apps/mobile/ios/ShareExtension/` — Xcode target with `NSExtension` pointing
+  at `ShareViewController.swift`.
+- The extension reads the incoming URL from `NSExtensionItem`, validates it is a
+  YouTube Short, then opens the main app via a custom URL scheme
+  (`shortstory://share?url=…`).
+- `app.json` — add `ios.infoPlist.LSApplicationQueriesSchemes` and the custom
+  URL scheme under `ios.associatedDomains` if needed.
+
+### 8B — Android intent filter
+
+- `app.json` — add an `intentFilters` entry under `android` so the main app
+  appears in the "Share" sheet for `text/plain` and YouTube URLs.
+- The `HomeScreen` reads the initial URL from `Linking.getInitialURL()` and
+  pre-fills the field.
+
+### 8C — Deep-link handoff
+
+- Add a `Linking` listener in the root `App.tsx` to catch `shortstory://share?url=…`
+  while the app is already running.
+- On receipt, navigate programmatically to `HomeScreen` with the URL pre-filled
+  (or trigger `createJob` directly if UX calls for it).
 
 ---
 
@@ -151,7 +123,7 @@ apps/backend/
     config/index.ts         Zod env validation (all required prod vars guarded)
     lib/logger.ts           Pino singleton
     lib/redis.ts            ioredis singleton (getRedis) + bullMQConnection options
-    lib/jobStore.ts         saveJob / getJob / updateJob (Redis JSON, 24h TTL); JobUpdate includes result
+    lib/jobStore.ts         saveJob / getJob / updateJob (Redis JSON, 24h TTL)
     lib/youtubeUrl.ts       extractVideoId() — Shorts/youtu.be/watch → 11-char ID or null
     lib/youtubeClient.ts    fetchVideoMetadata() — YouTube Data API v3
     lib/thumbnail.ts        downloadThumbnail() — fetch to tmp file, returns path
@@ -168,6 +140,18 @@ apps/backend/
     server.ts               Entry point + graceful shutdown
   Dockerfile          Multi-stage; Node 20 Alpine; ffmpeg + dumb-init installed
 
+apps/mobile/
+  App.tsx             NavigationContainer + native stack (Home → Processing → Result)
+  app.json            Expo config
+  metro.config.js     Monorepo watch folders + nodeModulesPaths
+  src/
+    navigation/types.ts     RootStackParamList
+    api/client.ts           createJob, getJobStatus (native fetch, EXPO_PUBLIC_API_URL)
+    hooks/useJobPoller.ts   useJobPoller(jobId, pollIntervalMs) → { status, error }
+    screens/HomeScreen.tsx
+    screens/ProcessingScreen.tsx
+    screens/ResultScreen.tsx
+
 docker-compose.yml    backend + redis:7-alpine (AOF, health-check ordering)
 
 docs/
@@ -182,6 +166,9 @@ docs/
 npm run build:shared                         # always run first
 npm run typecheck --workspace @shortstory/backend
 npm run dev --workspace @shortstory/backend  # tsx watch, hot-reload
+
+# Mobile (from apps/mobile/ or via workspace):
+cd apps/mobile && npx expo start             # Expo Go / simulator
 ```
 
 **Git:**

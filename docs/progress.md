@@ -153,13 +153,30 @@ Tracks phase completion, deliverables, and known issues carried forward.
 
 ---
 
-## Phase 7 — Mobile foundation ⬜
+## Phase 7 — Mobile foundation ✅
 
-**Target deliverables:**
-- Expo project setup
-- API client using `@shortstory/shared` types
-- Job polling logic
-- Basic UI scaffolding
+**Completed:** Session 5
+
+**Deliverables:**
+
+| File | Purpose |
+|---|---|
+| `apps/mobile/package.json` | Expo SDK 51, React Navigation native-stack, `@shortstory/shared` dep |
+| `apps/mobile/app.json` | Expo config (slug, bundle identifiers, portrait orientation) |
+| `apps/mobile/tsconfig.json` | `moduleResolution: bundler`, `jsx: react-jsx`, paths for `@shortstory/shared` dist |
+| `apps/mobile/babel.config.js` | `babel-preset-expo` |
+| `apps/mobile/metro.config.js` | Monorepo watch + `nodeModulesPaths` for workspace resolution |
+| `apps/mobile/App.tsx` | `NavigationContainer` + native stack (Home → Processing → Result) |
+| `src/navigation/types.ts` | `RootStackParamList` — typed params for all three screens |
+| `src/api/client.ts` | `createJob` + `getJobStatus` — native fetch, `EXPO_PUBLIC_API_URL`, typed via shared DTOs |
+| `src/hooks/useJobPoller.ts` | `useJobPoller(jobId, pollIntervalMs)` — interval poll, stops on terminal states, clears on unmount |
+| `src/screens/HomeScreen.tsx` | URL input + Generate button; calls `createJob`, navigates to Processing |
+| `src/screens/ProcessingScreen.tsx` | Shows stage label + percent from `JobProgress`; uses `useJobPoller`; navigates to Result on complete |
+| `src/screens/ResultScreen.tsx` | Displays card image from `downloadUrl`; disabled "Share to Story" button (Phase 9) |
+
+**Verified:**
+- `npm run build:shared && npx tsc --noEmit -p apps/mobile/tsconfig.json` — 0 errors
+- `npm run typecheck --workspace @shortstory/backend` — 0 errors (no regressions)
 
 ---
 

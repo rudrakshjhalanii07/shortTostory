@@ -60,6 +60,7 @@ Full compliance rationale: `docs/compliance.md`.
 | 4 | YouTube Data API v3 integration: URL extractor, metadata client (videos.list + channels.list), worker stub replaced with real fetch |
 | 5 | ffmpeg card pipeline: thumbnail downloader, 1080×1920 JPEG renderer with drawtext overlays, bundled Inter fonts, Dockerfile updated to include assets/ |
 | 6 | REST API (POST /api/v1/jobs, GET /api/v1/jobs/:id) + S3 upload (AWS SDK v3, pre-signed URL, production config guards) |
+| 7 | Mobile foundation: Expo SDK 51 scaffold, API client (native fetch, EXPO_PUBLIC_API_URL), useJobPoller hook, three-screen React Navigation stack (Home → Processing → Result) |
 
 ---
 
@@ -101,4 +102,13 @@ apps/backend/src/
 
 apps/backend/Dockerfile     Multi-stage; build context = repo root; ffmpeg pre-installed
 docker-compose.yml          backend + redis:7-alpine with AOF and health-check ordering
+
+apps/mobile/
+  App.tsx                   NavigationContainer + native stack (Home → Processing → Result)
+  app.json                  Expo slug, bundle IDs, portrait only
+  metro.config.js           watchFolders + nodeModulesPaths for workspace resolution
+  src/navigation/types.ts   RootStackParamList
+  src/api/client.ts         createJob / getJobStatus — native fetch, EXPO_PUBLIC_API_URL
+  src/hooks/useJobPoller.ts useJobPoller(jobId, pollIntervalMs) — stops on terminal state
+  src/screens/             HomeScreen, ProcessingScreen, ResultScreen
 ```
