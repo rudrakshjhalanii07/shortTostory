@@ -180,12 +180,29 @@ Tracks phase completion, deliverables, and known issues carried forward.
 
 ---
 
-## Phase 8 — Share extension ⬜
+## Phase 8 — Share extension ✅
 
-**Target deliverables:**
-- iOS share extension receiving YouTube URLs
-- Android intent filter
-- Deep-link handoff to main app
+**Completed:** Session 5
+
+**Deliverables:**
+
+| File | Purpose |
+|---|---|
+| `apps/mobile/ios/ShareExtension/ShareViewController.swift` | Share extension UI controller — reads URL from `NSExtensionItem`, validates it's a YouTube Short, opens `shortstory://share?url=…` via `extensionContext?.open` |
+| `apps/mobile/ios/ShareExtension/Info.plist` | `NSExtensionActivationSupportsWebURLWithMaxCount: 1` — extension only appears for web URLs |
+| `apps/mobile/app.json` | `scheme: "shortstory"` (iOS + Android custom URL scheme); `ios.infoPlist.LSApplicationQueriesSchemes`; Android `intentFilters` for `VIEW shortstory://share`, `VIEW youtube.com/shorts` + `youtu.be`, `SEND text/plain` |
+| `apps/mobile/src/lib/parseDeepLink.ts` | `parseShortStoryUrl(raw)` — extracts YouTube URL from `shortstory://share?url=…` |
+| `apps/mobile/App.tsx` | `Linking.addEventListener` (warm start) — parses incoming URL, navigates to `HomeScreen` with `incomingUrl` param |
+| `apps/mobile/src/navigation/types.ts` | `Home` param updated to `{ incomingUrl?: string } \| undefined` |
+| `apps/mobile/src/screens/HomeScreen.tsx` | `route.params?.incomingUrl` (warm start) + `Linking.getInitialURL()` (cold start) pre-fill the URL field |
+
+**iOS setup note (after `expo prebuild`):**
+1. Add a "Share Extension" target in Xcode named `ShareExtension`.
+2. Replace generated `ShareViewController.swift` / `Info.plist` with the checked-in files.
+3. Deployment target: iOS 16.0+. No App Group needed.
+
+**Verified:**
+- `npm run build:shared && npx tsc --noEmit -p apps/mobile/tsconfig.json` — 0 errors
 
 ---
 

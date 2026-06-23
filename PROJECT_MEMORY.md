@@ -61,6 +61,7 @@ Full compliance rationale: `docs/compliance.md`.
 | 5 | ffmpeg card pipeline: thumbnail downloader, 1080×1920 JPEG renderer with drawtext overlays, bundled Inter fonts, Dockerfile updated to include assets/ |
 | 6 | REST API (POST /api/v1/jobs, GET /api/v1/jobs/:id) + S3 upload (AWS SDK v3, pre-signed URL, production config guards) |
 | 7 | Mobile foundation: Expo SDK 51 scaffold, API client (native fetch, EXPO_PUBLIC_API_URL), useJobPoller hook, three-screen React Navigation stack (Home → Processing → Result) |
+| 8 | Share extension: iOS ShareViewController (validates YouTube Short, fires shortstory://share?url=…), Android intent filters (VIEW + SEND), deep-link handoff via Linking listener + HomeScreen cold/warm-start handling |
 
 ---
 
@@ -107,8 +108,10 @@ apps/mobile/
   App.tsx                   NavigationContainer + native stack (Home → Processing → Result)
   app.json                  Expo slug, bundle IDs, portrait only
   metro.config.js           watchFolders + nodeModulesPaths for workspace resolution
-  src/navigation/types.ts   RootStackParamList
+  ios/ShareExtension/       ShareViewController.swift + Info.plist (add to Xcode after prebuild)
+  src/navigation/types.ts   RootStackParamList (Home: { incomingUrl? } | undefined)
+  src/lib/parseDeepLink.ts  parseShortStoryUrl(raw) → YouTube URL | null
   src/api/client.ts         createJob / getJobStatus — native fetch, EXPO_PUBLIC_API_URL
   src/hooks/useJobPoller.ts useJobPoller(jobId, pollIntervalMs) — stops on terminal state
-  src/screens/             HomeScreen, ProcessingScreen, ResultScreen
+  src/screens/             HomeScreen (deep-link pre-fill), ProcessingScreen, ResultScreen
 ```

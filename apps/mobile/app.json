@@ -5,19 +5,60 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "scheme": "shortstory",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.shortstory.app"
+      "bundleIdentifier": "com.shortstory.app",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["youtube", "youtube-x-callback"]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
-      "package": "com.shortstory.app"
+      "package": "com.shortstory.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "shortstory",
+              "host": "share"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.youtube.com",
+              "pathPrefix": "/shorts"
+            },
+            {
+              "scheme": "https",
+              "host": "youtu.be"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "SEND",
+          "data": [
+            {
+              "mimeType": "text/plain"
+            }
+          ],
+          "category": ["DEFAULT"]
+        }
+      ]
     },
     "extra": {
       "apiUrl": "http://localhost:3000"

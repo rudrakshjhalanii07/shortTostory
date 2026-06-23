@@ -1,5 +1,5 @@
 export type RootStackParamList = {
-  Home: undefined;
+  Home: { incomingUrl?: string } | undefined;
   Processing: { jobId: string; pollIntervalMs: number };
   Result: { downloadUrl: string };
 };

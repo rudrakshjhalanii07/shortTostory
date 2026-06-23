@@ -7,8 +7,8 @@
 
 ## Where we are
 
-**Last completed phase:** Phase 7 — Mobile foundation  
-**Next phase:** Phase 8 — Share extension (iOS share extension + Android intent filter)
+**Last completed phase:** Phase 8 — Share extension  
+**Next phase:** Phase 9 — Instagram Story sharing
 
 Both `@shortstory/shared`, `@shortstory/backend`, and `@shortstory/mobile`
 typecheck clean with 0 errors. The repo is committed to
@@ -16,84 +16,109 @@ typecheck clean with 0 errors. The repo is committed to
 
 ---
 
-## What was just completed (Phase 7)
-
-### 7A — Expo project scaffold
-
-`apps/mobile/` is now a full Expo SDK 51 project (React Native 0.74). Key
-config files:
-
-- `package.json` — Expo SDK 51, React Navigation native-stack,
-  `@shortstory/shared: "*"` workspace dep, `main: node_modules/expo/AppEntry.js`
-- `app.json` — Expo slug `shortstory`, portrait orientation, iOS bundle ID
-  `com.shortstory.app`
-- `tsconfig.json` — `moduleResolution: bundler`, `jsx: react-jsx`, `paths`
-  pointing `@shortstory/shared` at the compiled dist for type checking
-- `babel.config.js` — `babel-preset-expo`
-- `metro.config.js` — `watchFolders: [monorepoRoot]`,
-  `nodeModulesPaths: [appRoot/node_modules, monorepoRoot/node_modules]`
-
-### 7B — API client (`src/api/client.ts`)
-
-Typed wrapper over native `fetch`:
-
-- `BASE_URL` reads `process.env.EXPO_PUBLIC_API_URL` (fallback: `http://localhost:3000`).
-- `createJob(url)` → `POST /api/v1/jobs` → `CreateJobResponse`
-- `getJobStatus(jobId)` → `GET /api/v1/jobs/:id` → `JobStatusResponse`
-- Non-2xx: parses `ApiErrorResponse.error.message`, throws `Error`.
-
-### 7C — Polling hook (`src/hooks/useJobPoller.ts`)
-
-```ts
-useJobPoller(jobId: string | null, pollIntervalMs = 2000)
-  → { status: JobStatusResponse | null; error: string | null }
-```
-
-- Fires an immediate poll on mount, then every `pollIntervalMs` ms.
-- Stops (clears interval) when `state === 'completed' | 'failed'`.
-- Also stops on network errors, surfacing them via `error`.
-- Cleans up on unmount.
-
-### 7D — Three-screen UI
-
-React Navigation native-stack (`NavigationContainer` in `App.tsx`):
-
-| Screen | Route params | Behaviour |
-|---|---|---|
-| `HomeScreen` | — | TextInput + Generate button; calls `createJob`; navigates to `Processing` |
-| `ProcessingScreen` | `{ jobId, pollIntervalMs }` | `useJobPoller`; shows `JobProgress.stage` (human label) + percent; `replace('Result')` on complete; shows error on fail. Back gesture disabled. |
-| `ResultScreen` | `{ downloadUrl }` | `Image` from signed URL; disabled "Share to Story" button (Phase 9) |
-
----
-
-## Immediate next steps (Phase 8)
-
-Phase 8 wires up the iOS share extension and Android intent filter so users can
-send a YouTube Short directly from the native share sheet.
+## What was just completed (Phase 8)
 
 ### 8A — iOS share extension
 
-- `apps/mobile/ios/ShareExtension/` — Xcode target with `NSExtension` pointing
-  at `ShareViewController.swift`.
-- The extension reads the incoming URL from `NSExtensionItem`, validates it is a
-  YouTube Short, then opens the main app via a custom URL scheme
-  (`shortstory://share?url=…`).
-- `app.json` — add `ios.infoPlist.LSApplicationQueriesSchemes` and the custom
-  URL scheme under `ios.associatedDomains` if needed.
+`apps/mobile/ios/ShareExtension/` contains two files that are added to the
+Xcode project after `expo prebuild`:
+
+**`ShareViewController.swift`**
+- Subclasses `UIViewController`; invoked when user taps ShortStory in the iOS
+  share sheet.
+- Reads `NSExtensionItem.attachments[0]` as `UTType.url`.
+- Validates the URL contains `youtube.com/shorts/` or `youtu.be/`.
+- Constructs `shortstory://share?url=<encoded YouTube URL>` and fires it via
+  `extensionContext?.open(_:completionHandler:)`.
+- Always calls `extensionContext?.completeRequest` to dismiss cleanly.
+
+**`Info.plist`**
+- `NSExtensionPointIdentifier: com.apple.share-services`
+- `NSExtensionActivationSupportsWebURLWithMaxCount: 1` — only activates for
+  single web-URL shares, not plain text or photos.
+
+**Setup after `expo prebuild`:**
+1. Add a "Share Extension" Xcode target named `ShareExtension`.
+2. Swap in the checked-in `ShareViewController.swift` and `Info.plist`.
+3. Set deployment target to iOS 16.0+. No App Group required.
 
 ### 8B — Android intent filter
 
-- `app.json` — add an `intentFilters` entry under `android` so the main app
-  appears in the "Share" sheet for `text/plain` and YouTube URLs.
-- The `HomeScreen` reads the initial URL from `Linking.getInitialURL()` and
-  pre-fills the field.
+Three filters added to `app.json` under `android.intentFilters`:
+1. `ACTION_VIEW` `shortstory://share` — the deep-link scheme itself
+2. `ACTION_VIEW` `https://www.youtube.com/shorts/*` + `https://youtu.be/*` —
+   ShortStory appears in the share sheet when the user taps "Share" on a
+   YouTube Short in Chrome/YouTube app
+3. `ACTION_SEND` `text/plain` — generic text share (covers other URL-copy flows)
+
+`"scheme": "shortstory"` added at the top level of the Expo config so both
+platforms register the custom URL scheme.
+
+`ios.infoPlist.LSApplicationQueriesSchemes` lists `youtube` and
+`youtube-x-callback` so the app can check for the YouTube app if needed later.
 
 ### 8C — Deep-link handoff
 
-- Add a `Linking` listener in the root `App.tsx` to catch `shortstory://share?url=…`
-  while the app is already running.
-- On receipt, navigate programmatically to `HomeScreen` with the URL pre-filled
-  (or trigger `createJob` directly if UX calls for it).
+**`src/lib/parseDeepLink.ts`** — `parseShortStoryUrl(raw: string): string | null`  
+Parses `shortstory://share?url=…` and returns the decoded YouTube URL, or null
+for any other input.
+
+**`App.tsx`** — warm-start listener  
+`createNavigationContainerRef` + `Linking.addEventListener('url', …)` catches
+incoming deep links while the app is already running. Calls
+`navigationRef.navigate('Home', { incomingUrl })`.
+
+**`src/screens/HomeScreen.tsx`** — cold-start + param handling  
+- `route.params?.incomingUrl` — set by the warm-start navigate; pre-fills the
+  text field via `useEffect`.
+- `Linking.getInitialURL()` — if the app was killed and launched directly by the
+  share extension, the URL comes in here; piped through `parseShortStoryUrl`.
+
+**`src/navigation/types.ts`** — `Home` route updated to
+`{ incomingUrl?: string } | undefined`.
+
+---
+
+## Immediate next steps (Phase 9)
+
+Phase 9 wires the "Share to Story" button in `ResultScreen` to Instagram's
+native story composer.
+
+### 9A — Download the signed card
+
+The `CardResult.downloadUrl` is a pre-signed S3 URL valid for 1 hour. Before
+handing the card to Instagram, download it to the device's local filesystem
+using `expo-file-system` (`FileSystem.downloadAsync`).
+
+### 9B — Instagram story composer
+
+Instagram exposes the `instagram-stories://share` URL scheme:
+
+```
+instagram-stories://share?
+  backgroundImage=<file URI>&
+  backgroundTopColor=%23ffffff&
+  backgroundBottomColor=%23000000&
+  stickerImage=<optional overlay>&
+  contentURL=<attribution link>
+```
+
+Pipe the downloaded card path as `backgroundImage`. Set `contentURL` to
+`CardResult.attributionLinkUrl` (the original Short URL) so Instagram attaches
+the link sticker automatically.
+
+Check `Linking.canOpenURL('instagram://app')` before opening; show a friendly
+message if Instagram is not installed.
+
+### 9C — Wire up ResultScreen
+
+Replace the disabled "Share to Story" button with a real handler:
+1. Show a loading spinner while downloading.
+2. Call `FileSystem.downloadAsync(downloadUrl, localPath)`.
+3. Open `instagram-stories://share?...`.
+4. Clean up the local file after the deep link fires.
+
+Add `expo-file-system` to `apps/mobile/package.json`.
 
 ---
 
@@ -141,16 +166,20 @@ apps/backend/
   Dockerfile          Multi-stage; Node 20 Alpine; ffmpeg + dumb-init installed
 
 apps/mobile/
-  App.tsx             NavigationContainer + native stack (Home → Processing → Result)
-  app.json            Expo config
+  App.tsx             NavigationContainer + Linking warm-start listener + native stack
+  app.json            scheme: "shortstory"; iOS LSApplicationQueriesSchemes; Android intentFilters
   metro.config.js     Monorepo watch folders + nodeModulesPaths
+  ios/ShareExtension/
+    ShareViewController.swift   Reads URL → validates YouTube Short → opens shortstory://share?url=…
+    Info.plist                  NSExtensionActivationSupportsWebURLWithMaxCount: 1
   src/
-    navigation/types.ts     RootStackParamList
+    navigation/types.ts     RootStackParamList (Home accepts optional incomingUrl)
+    lib/parseDeepLink.ts    parseShortStoryUrl(raw) → YouTube URL | null
     api/client.ts           createJob, getJobStatus (native fetch, EXPO_PUBLIC_API_URL)
     hooks/useJobPoller.ts   useJobPoller(jobId, pollIntervalMs) → { status, error }
-    screens/HomeScreen.tsx
+    screens/HomeScreen.tsx  Cold-start (Linking.getInitialURL) + warm-start (route.params)
     screens/ProcessingScreen.tsx
-    screens/ResultScreen.tsx
+    screens/ResultScreen.tsx   "Share to Story" placeholder (Phase 9)
 
 docker-compose.yml    backend + redis:7-alpine (AOF, health-check ordering)
 
@@ -167,8 +196,10 @@ npm run build:shared                         # always run first
 npm run typecheck --workspace @shortstory/backend
 npm run dev --workspace @shortstory/backend  # tsx watch, hot-reload
 
-# Mobile (from apps/mobile/ or via workspace):
+# Mobile:
 cd apps/mobile && npx expo start             # Expo Go / simulator
+# Deep-link test (simulator):
+xcrun simctl openurl booted "shortstory://share?url=https%3A%2F%2Fwww.youtube.com%2Fshorts%2FdQw4w9WgXcQ"
 ```
 
 **Git:**

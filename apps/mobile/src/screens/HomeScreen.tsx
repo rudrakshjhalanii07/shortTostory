@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   StyleSheet,
   Text,
   TextInput,
@@ -10,13 +11,33 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
+import { parseShortStoryUrl } from '../lib/parseDeepLink';
 import { createJob } from '../api/client';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
-export default function HomeScreen({ navigation }: Props) {
+export default function HomeScreen({ navigation, route }: Props) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Warm start: URL arrived via the Linking listener in App.tsx and was
+    // forwarded here as a navigation param.
+    const incomingUrl = route.params?.incomingUrl;
+    if (incomingUrl) {
+      setUrl(incomingUrl);
+      return;
+    }
+
+    // Cold start: app was launched directly by the share extension deep link.
+    Linking.getInitialURL()
+      .then((initial) => {
+        if (!initial) return;
+        const parsed = parseShortStoryUrl(initial);
+        if (parsed) setUrl(parsed);
+      })
+      .catch(() => undefined);
+  }, [route.params?.incomingUrl]);
 
   const handleSubmit = async () => {
     const trimmed = url.trim();
