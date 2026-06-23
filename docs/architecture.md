@@ -71,7 +71,7 @@ downloaded or redistributed** — see [compliance.md](./compliance.md).
 - **Ephemeral media.** Rendered cards live behind short-TTL signed URLs; the
   scratch space (`tmp/`) is never committed.
 
-## Backend middleware stack (Phase 2)
+## Backend middleware stack (Phase 2 + 3)
 
 Every inbound HTTP request passes through these layers in order:
 
@@ -80,10 +80,10 @@ helmet          → security headers (CSP, HSTS, X-Frame-Options …)
 cors            → origin allow-list from CORS_ORIGINS env var
 requestId       → attach UUID to req.id; echo as X-Request-Id header
 requestLogger   → pino-backed structured log on response finish
-rateLimit       → in-memory store (Phase 3 upgrades to Redis store)
+rateLimit       → Redis-backed store (rate-limit-redis@4 + ioredis)
 express.json    → 16 KB body cap
 ─── routes ────
-/health         → liveness probe
+/health         → liveness probe (includes Redis PING, Phase 3)
 /api/v1/…       → job API (Phase 6)
 ─── 404 handler ─
 errorHandler    → collapses AppError / unknown throws → ApiErrorResponse
@@ -107,5 +107,5 @@ variable reference.
 
 - Card visual design / template system (Phase 5).
 - Whether the card is a static image or a short animated MP4 (Phase 5).
-- Rate-limit store migration from memory → Redis (Phase 3).
 - Abuse controls beyond basic rate limiting (Phase 6/10).
+- Whether to split the Express API and BullMQ worker into separate processes for independent scaling (deferred to Phase 10 per ADR-002).

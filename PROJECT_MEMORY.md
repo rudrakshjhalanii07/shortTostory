@@ -43,6 +43,10 @@ Full compliance rationale: `docs/compliance.md`.
 | UUID library | uuid v11+ | v10 has moderate CVE GHSA-w5hq-g745-h8pq |
 | PID 1 in Docker | dumb-init | Node ignores SIGTERM as PID 1 without it |
 | Body limit | 16 KB | Blocks payload-inflation attacks |
+| ioredis import | `import { Redis } from 'ioredis'` (named) | Default import resolves as namespace under NodeNext; named export works correctly (ADR-007) |
+| BullMQ connection | `{ url: REDIS_URL }` options object | BullMQ creates its own connections with the correct blocking-command settings; no shared client needed (ADR-007) |
+| Rate-limit store | `rate-limit-redis@4` (not v5) | v5 requires express-rate-limit ≥ 8.5; we use v7. Pinned at v4 (ADR-007) |
+| Job persistence | JSON string at `job:{id}`, 24h TTL | Simpler than Redis hashes for nested types; avoids serialization of optional fields (ADR-007) |
 
 ---
 

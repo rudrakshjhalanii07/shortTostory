@@ -139,3 +139,40 @@ it and require a full image rebuild in CI.
 **Decision:** Install ffmpeg (and dumb-init, curl) in the production image now,
 with a comment noting their usage phase. The image is slightly larger but the
 layer cache is preserved across all subsequent phases.
+
+---
+
+## ADR-007 — Phase 3 implementation choices (ioredis, BullMQ, rate-limit-redis, job storage)
+
+**Date:** Phase 3  
+**Status:** Accepted
+
+**Context:** Four small decisions made during Phase 3 that each have a
+non-obvious rationale worth preserving.
+
+**ioredis import style — named `{ Redis }`, not default:**  
+Under `module: NodeNext`, TypeScript resolves `import Redis from 'ioredis'` as
+a namespace (no construct signatures). The package exports both a default and a
+named `Redis` symbol; `import { Redis } from 'ioredis'` is the form that
+TypeScript resolves correctly as a class.
+
+**BullMQ connection — `{ url }` options object, not a shared ioredis instance:**  
+BullMQ requires ioredis connections created with `maxRetriesPerRequest: null`
+and `enableReadyCheck: false` (needed for blocking commands). Rather than
+maintaining a separate "BullMQ-compatible" singleton, we pass
+`{ url: REDIS_URL }` as connection options; BullMQ creates and manages its own
+connections internally. The general-purpose app client (`getRedis()`) is kept
+separate and used only for health checks, the job store, and the rate limiter.
+
+**`rate-limit-redis@4`, not v5:**  
+`rate-limit-redis@5` requires `express-rate-limit >= 8.5.0`. The project uses
+`express-rate-limit@7`. v4 is compatible with v7 and otherwise identical in
+interface. If `express-rate-limit` is ever upgraded to v8, upgrade
+`rate-limit-redis` to v5 at the same time.
+
+**Job records as JSON strings, not Redis hashes:**  
+`Job` has deeply nested optional fields (`progress`, `metadata`, `result`,
+`error`). Storing as a JSON string under `job:{id}` with `SET … EX` is simpler
+than flattening nested types into hash fields and back. TTL is set at 24 hours
+— long enough for the mobile client to poll within a session, short enough to
+keep Redis memory bounded.
