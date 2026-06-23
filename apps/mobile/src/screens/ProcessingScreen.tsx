@@ -19,7 +19,10 @@ export default function ProcessingScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (status?.state === 'completed' && status.result?.downloadUrl) {
-      navigation.replace('Result', { downloadUrl: status.result.downloadUrl });
+      navigation.replace('Result', {
+        downloadUrl: status.result.downloadUrl,
+        attributionLinkUrl: status.result.attributionLinkUrl,
+      });
     }
   }, [status, navigation]);
 

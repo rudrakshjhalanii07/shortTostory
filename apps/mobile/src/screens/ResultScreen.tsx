@@ -1,11 +1,50 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Linking,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
 export default function ResultScreen({ route }: Props) {
-  const { downloadUrl } = route.params;
+  const { downloadUrl, attributionLinkUrl } = route.params;
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = useCallback(async () => {
+    const canOpen = await Linking.canOpenURL('instagram://app');
+    if (!canOpen) {
+      Alert.alert(
+        'Instagram not installed',
+        'Install Instagram to share your Story.',
+      );
+      return;
+    }
+
+    setSharing(true);
+    const localPath = `${FileSystem.cacheDirectory}card_${Date.now()}.jpg`;
+    try {
+      await FileSystem.downloadAsync(downloadUrl, localPath);
+      const storyUrl =
+        `instagram-stories://share` +
+        `?backgroundImage=${encodeURIComponent(localPath)}` +
+        `&contentURL=${encodeURIComponent(attributionLinkUrl)}`;
+      await Linking.openURL(storyUrl);
+    } catch {
+      Alert.alert('Share failed', 'Could not open Instagram. Please try again.');
+    } finally {
+      FileSystem.deleteAsync(localPath, { idempotent: true }).catch(() => {});
+      setSharing(false);
+    }
+  }, [downloadUrl, attributionLinkUrl]);
 
   return (
     <View style={styles.container}>
@@ -14,9 +53,17 @@ export default function ResultScreen({ route }: Props) {
         style={styles.card}
         resizeMode="contain"
       />
-      <TouchableOpacity style={styles.button} disabled activeOpacity={1}>
-        <Text style={styles.buttonText}>Share to Story</Text>
-        <Text style={styles.buttonSub}>Coming soon</Text>
+      <TouchableOpacity
+        style={[styles.button, sharing && styles.buttonDisabled]}
+        onPress={handleShare}
+        disabled={sharing}
+        activeOpacity={0.8}
+      >
+        {sharing ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Share to Story</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -42,17 +89,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingVertical: 14,
     alignItems: 'center',
-    opacity: 0.45,
+    justifyContent: 'center',
     width: '100%',
+    minHeight: 52,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#fff',
     fontWeight: '700',
     fontSize: 17,
-  },
-  buttonSub: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12,
-    marginTop: 2,
   },
 });

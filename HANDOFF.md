@@ -7,118 +7,84 @@
 
 ## Where we are
 
-**Last completed phase:** Phase 8 — Share extension  
-**Next phase:** Phase 9 — Instagram Story sharing
+**Last completed phase:** Phase 9 — Instagram Story sharing  
+**Next phase:** Phase 10 — Production deployment
 
-Both `@shortstory/shared`, `@shortstory/backend`, and `@shortstory/mobile`
+All three packages (`@shortstory/shared`, `@shortstory/backend`, `@shortstory/mobile`)
 typecheck clean with 0 errors. The repo is committed to
 `https://github.com/rudrakshjhalanii07/shortTostory` (private, main branch).
 
 ---
 
-## What was just completed (Phase 8)
-
-### 8A — iOS share extension
-
-`apps/mobile/ios/ShareExtension/` contains two files that are added to the
-Xcode project after `expo prebuild`:
-
-**`ShareViewController.swift`**
-- Subclasses `UIViewController`; invoked when user taps ShortStory in the iOS
-  share sheet.
-- Reads `NSExtensionItem.attachments[0]` as `UTType.url`.
-- Validates the URL contains `youtube.com/shorts/` or `youtu.be/`.
-- Constructs `shortstory://share?url=<encoded YouTube URL>` and fires it via
-  `extensionContext?.open(_:completionHandler:)`.
-- Always calls `extensionContext?.completeRequest` to dismiss cleanly.
-
-**`Info.plist`**
-- `NSExtensionPointIdentifier: com.apple.share-services`
-- `NSExtensionActivationSupportsWebURLWithMaxCount: 1` — only activates for
-  single web-URL shares, not plain text or photos.
-
-**Setup after `expo prebuild`:**
-1. Add a "Share Extension" Xcode target named `ShareExtension`.
-2. Swap in the checked-in `ShareViewController.swift` and `Info.plist`.
-3. Set deployment target to iOS 16.0+. No App Group required.
-
-### 8B — Android intent filter
-
-Three filters added to `app.json` under `android.intentFilters`:
-1. `ACTION_VIEW` `shortstory://share` — the deep-link scheme itself
-2. `ACTION_VIEW` `https://www.youtube.com/shorts/*` + `https://youtu.be/*` —
-   ShortStory appears in the share sheet when the user taps "Share" on a
-   YouTube Short in Chrome/YouTube app
-3. `ACTION_SEND` `text/plain` — generic text share (covers other URL-copy flows)
-
-`"scheme": "shortstory"` added at the top level of the Expo config so both
-platforms register the custom URL scheme.
-
-`ios.infoPlist.LSApplicationQueriesSchemes` lists `youtube` and
-`youtube-x-callback` so the app can check for the YouTube app if needed later.
-
-### 8C — Deep-link handoff
-
-**`src/lib/parseDeepLink.ts`** — `parseShortStoryUrl(raw: string): string | null`  
-Parses `shortstory://share?url=…` and returns the decoded YouTube URL, or null
-for any other input.
-
-**`App.tsx`** — warm-start listener  
-`createNavigationContainerRef` + `Linking.addEventListener('url', …)` catches
-incoming deep links while the app is already running. Calls
-`navigationRef.navigate('Home', { incomingUrl })`.
-
-**`src/screens/HomeScreen.tsx`** — cold-start + param handling  
-- `route.params?.incomingUrl` — set by the warm-start navigate; pre-fills the
-  text field via `useEffect`.
-- `Linking.getInitialURL()` — if the app was killed and launched directly by the
-  share extension, the URL comes in here; piped through `parseShortStoryUrl`.
-
-**`src/navigation/types.ts`** — `Home` route updated to
-`{ incomingUrl?: string } | undefined`.
-
----
-
-## Immediate next steps (Phase 9)
-
-Phase 9 wires the "Share to Story" button in `ResultScreen` to Instagram's
-native story composer.
+## What was just completed (Phase 9)
 
 ### 9A — Download the signed card
 
-The `CardResult.downloadUrl` is a pre-signed S3 URL valid for 1 hour. Before
-handing the card to Instagram, download it to the device's local filesystem
-using `expo-file-system` (`FileSystem.downloadAsync`).
+`ResultScreen` uses `expo-file-system` (`FileSystem.downloadAsync`) to fetch
+`CardResult.downloadUrl` (a pre-signed S3 URL) into a temp file at
+`FileSystem.cacheDirectory + 'card_<timestamp>.jpg'` before opening Instagram.
 
 ### 9B — Instagram story composer
 
-Instagram exposes the `instagram-stories://share` URL scheme:
-
+The handler opens:
 ```
-instagram-stories://share?
-  backgroundImage=<file URI>&
-  backgroundTopColor=%23ffffff&
-  backgroundBottomColor=%23000000&
-  stickerImage=<optional overlay>&
-  contentURL=<attribution link>
+instagram-stories://share
+  ?backgroundImage=<encodeURIComponent(localPath)>
+  &contentURL=<encodeURIComponent(attributionLinkUrl)>
 ```
+`Linking.canOpenURL('instagram://app')` is checked first; if Instagram is not
+installed the user sees a friendly `Alert` and the flow is aborted before the
+download starts.
 
-Pipe the downloaded card path as `backgroundImage`. Set `contentURL` to
-`CardResult.attributionLinkUrl` (the original Short URL) so Instagram attaches
-the link sticker automatically.
+### 9C — ResultScreen wired
 
-Check `Linking.canOpenURL('instagram://app')` before opening; show a friendly
-message if Instagram is not installed.
+`ResultScreen` now:
+1. Checks Instagram availability before doing any work.
+2. Shows an `ActivityIndicator` on the button while downloading.
+3. Calls `FileSystem.downloadAsync`, then `Linking.openURL`.
+4. Always calls `FileSystem.deleteAsync(..., { idempotent: true })` in the
+   `finally` block to clean up the local file.
+5. Shows an `Alert` on any caught error.
 
-### 9C — Wire up ResultScreen
+**Navigation type change:** `Result` params extended with
+`attributionLinkUrl: string`. `ProcessingScreen` now passes
+`status.result.attributionLinkUrl` alongside `downloadUrl` when navigating.
 
-Replace the disabled "Share to Story" button with a real handler:
-1. Show a loading spinner while downloading.
-2. Call `FileSystem.downloadAsync(downloadUrl, localPath)`.
-3. Open `instagram-stories://share?...`.
-4. Clean up the local file after the deep link fires.
+---
 
-Add `expo-file-system` to `apps/mobile/package.json`.
+## Immediate next steps (Phase 10)
+
+Phase 10 hardens the deployment for production.
+
+### 10A — Docker Compose hardening
+
+- Add `restart: unless-stopped` to both services.
+- Add `mem_limit` / `cpus` resource caps to the backend service.
+- Ensure Redis uses an explicit named volume for AOF persistence.
+
+### 10B — HTTPS reverse proxy
+
+Add an nginx (or Caddy) service to `docker-compose.yml` that terminates TLS
+and reverse-proxies to the Express backend. The backend should bind only to
+`127.0.0.1` inside the Compose network.
+
+### 10C — CI/CD pipeline
+
+A GitHub Actions workflow that:
+1. Builds `@shortstory/shared` and runs `tsc --noEmit` for both backend and mobile.
+2. Builds the Docker image and pushes it to a registry on merges to `main`.
+3. (Optional) Deploys to a VPS via SSH + `docker compose pull && docker compose up -d`.
+
+### 10D — Environment separation
+
+Document (or script) how to run a staging stack alongside production, with
+separate Redis and S3 bucket/prefix, using Docker Compose `--project-name`.
+
+### 10E — MinIO local dev
+
+Add a `minio` service to `docker-compose.yml` (gated by a `--profile dev`
+profile) so the full S3 upload pipeline can be exercised without live AWS
+credentials.
 
 ---
 

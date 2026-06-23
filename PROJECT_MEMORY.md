@@ -62,6 +62,7 @@ Full compliance rationale: `docs/compliance.md`.
 | 6 | REST API (POST /api/v1/jobs, GET /api/v1/jobs/:id) + S3 upload (AWS SDK v3, pre-signed URL, production config guards) |
 | 7 | Mobile foundation: Expo SDK 51 scaffold, API client (native fetch, EXPO_PUBLIC_API_URL), useJobPoller hook, three-screen React Navigation stack (Home → Processing → Result) |
 | 8 | Share extension: iOS ShareViewController (validates YouTube Short, fires shortstory://share?url=…), Android intent filters (VIEW + SEND), deep-link handoff via Linking listener + HomeScreen cold/warm-start handling |
+| 9 | Instagram Story sharing: expo-file-system download of pre-signed card URL, instagram-stories://share deep link, Instagram install check, spinner UX, temp-file cleanup |
 
 ---
 
@@ -113,5 +114,5 @@ apps/mobile/
   src/lib/parseDeepLink.ts  parseShortStoryUrl(raw) → YouTube URL | null
   src/api/client.ts         createJob / getJobStatus — native fetch, EXPO_PUBLIC_API_URL
   src/hooks/useJobPoller.ts useJobPoller(jobId, pollIntervalMs) — stops on terminal state
-  src/screens/             HomeScreen (deep-link pre-fill), ProcessingScreen, ResultScreen
+  src/screens/             HomeScreen (deep-link pre-fill), ProcessingScreen, ResultScreen (Instagram share)
 ```

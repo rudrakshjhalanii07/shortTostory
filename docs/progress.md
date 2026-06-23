@@ -206,12 +206,21 @@ Tracks phase completion, deliverables, and known issues carried forward.
 
 ---
 
-## Phase 9 — Instagram story sharing ⬜
+## Phase 9 — Instagram story sharing ✅
 
-**Target deliverables:**
-- `instagram-stories://` deep link integration
-- Video download from signed URL
-- Story composer pre-load
+**Completed:** Session 6
+
+**Deliverables:**
+
+| File | Purpose |
+|---|---|
+| `apps/mobile/package.json` | Added `expo-file-system ~17.0.1` |
+| `apps/mobile/src/navigation/types.ts` | `Result` params extended with `attributionLinkUrl: string` |
+| `apps/mobile/src/screens/ProcessingScreen.tsx` | Passes `attributionLinkUrl` from `CardResult` when navigating to Result |
+| `apps/mobile/src/screens/ResultScreen.tsx` | Real "Share to Story" handler: checks Instagram install, downloads card via `FileSystem.downloadAsync`, opens `instagram-stories://share?backgroundImage=…&contentURL=…`, cleans up temp file |
+
+**Verified:**
+- `npm run typecheck --workspace @shortstory/mobile` — 0 errors
 
 ---
 
