@@ -59,6 +59,7 @@ Full compliance rationale: `docs/compliance.md`.
 | 3 | Redis (ioredis singleton, job store, Redis rate-limit store), BullMQ queue + worker stub, health Redis ping |
 | 4 | YouTube Data API v3 integration: URL extractor, metadata client (videos.list + channels.list), worker stub replaced with real fetch |
 | 5 | ffmpeg card pipeline: thumbnail downloader, 1080×1920 JPEG renderer with drawtext overlays, bundled Inter fonts, Dockerfile updated to include assets/ |
+| 6 | REST API (POST /api/v1/jobs, GET /api/v1/jobs/:id) + S3 upload (AWS SDK v3, pre-signed URL, production config guards) |
 
 ---
 
@@ -66,7 +67,7 @@ Full compliance rationale: `docs/compliance.md`.
 
 | Issue | Carried to |
 |---|---|
-| Card rendered but not uploaded (cleaned up immediately) | Phase 6 (S3 upload + signed URL) |
+| S3 upload requires live credentials; MinIO via S3_ENDPOINT for local dev | Phase 10 (production hardening) |
 
 ---
 
@@ -88,11 +89,13 @@ apps/backend/src/
   lib/youtubeClient.ts    fetchVideoMetadata() — YouTube Data API v3 (videos.list + channels.list)
   lib/thumbnail.ts        downloadThumbnail() — fetch to tmp file, returns path
   lib/cardRenderer.ts     renderCard() — ffmpeg 1080×1920 JPEG with Inter font overlays
+  lib/s3Uploader.ts       uploadCard() — PutObject to S3, pre-signed GET URL, deletes local file
   types/errors.ts         AppError with isOperational flag
   middleware/             requestId, requestLogger, errorHandler
   routes/health.ts        GET /health → { status, version, uptimeSeconds, timestamp, redis }
+  routes/jobs.ts          POST /api/v1/jobs + GET /api/v1/jobs/:id
   queues/cardQueue.ts     BullMQ Queue<CardJobData>
-  workers/cardWorker.ts   BullMQ Worker; fetches metadata, advances to downloading_thumbnail
+  workers/cardWorker.ts   BullMQ Worker; full pipeline: metadata → thumbnail → render → S3 upload → completed
   app.ts                  Express factory; rate limiter uses RedisStore
   server.ts               Graceful shutdown (worker.close + closeRedis + 10s force-exit)
 

@@ -130,13 +130,26 @@ Tracks phase completion, deliverables, and known issues carried forward.
 
 ---
 
-## Phase 6 — REST API ⬜
+## Phase 6 — REST API + S3 upload ✅
 
-**Target deliverables:**
-- `POST /api/v1/jobs` — validate, enqueue, return job ID
-- `GET /api/v1/jobs/:id` — poll job status
-- Input validation (Zod schemas for request bodies)
-- Full integration with BullMQ worker
+**Completed:** Session 4
+
+**Deliverables:**
+
+| File | Purpose |
+|---|---|
+| `src/routes/jobs.ts` | `POST /api/v1/jobs` (validate URL, create job, enqueue) + `GET /api/v1/jobs/:id` (poll status) |
+| `src/lib/s3Uploader.ts` | `uploadCard()` — PutObject to S3, pre-signed GET URL, deletes local temp file on success |
+| `src/config/index.ts` | S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY required in production |
+| `src/lib/jobStore.ts` | `JobUpdate` now includes `result: CardResult` so worker can persist upload result |
+| `src/workers/cardWorker.ts` | `uploadCard()` wired after render; `uploadDone` flag guards temp-file cleanup in finally |
+| `src/app.ts` | Jobs router mounted at `API_BASE_PATH` |
+
+**Verified:**
+- `npm run build:shared && npm run typecheck --workspace @shortstory/backend` — 0 errors
+
+**Known issues / carried forward:**
+- S3 upload requires live credentials to test end-to-end; local dev uses MinIO via `S3_ENDPOINT`.
 
 ---
 
