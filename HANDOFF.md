@@ -7,152 +7,94 @@
 
 ## Where we are
 
-**Last completed phase:** Phase 3 — Redis & BullMQ  
-**Next phase:** Phase 4 — YouTube Data API integration
+**Last completed phase:** Phase 4 — YouTube Data API integration  
+**Next phase:** Phase 5 — ffmpeg card pipeline
 
 Both `@shortstory/shared` and `@shortstory/backend` typecheck clean with 0
-errors. The repo is committed and pushed to
+errors. The repo is committed to
 `https://github.com/rudrakshjhalanii07/shortTostory` (private, main branch).
-Docker and docker-compose are wired but the image has not been built end-to-end
-(Phase 10 hardening).
 
 ---
 
-## What was just completed (Phase 3)
+## What was just completed (Phase 4)
 
-- **`ioredis` client** (`src/lib/redis.ts`): `getRedis()` singleton with
-  exponential reconnect. `closeRedis()` called on graceful shutdown.
-  `bullMQConnection = { url: REDIS_URL }` is passed to BullMQ so it manages
-  its own connections internally (required for blocking commands — see ADR-007).
+- **Config** (`src/config/index.ts`): `YOUTUBE_API_KEY` now required in
+  production (same guard pattern as `REDIS_URL`).
 
-- **Job store** (`src/lib/jobStore.ts`): `saveJob` / `getJob` / `updateJob`
-  persist `Job` records as JSON strings under `job:{id}` with a 24-hour TTL.
+- **URL extractor** (`src/lib/youtubeUrl.ts`): `extractVideoId(raw)` handles
+  the three canonical YouTube Short URL forms (Shorts canonical, `youtu.be`
+  redirect, watch URL). Returns `null` on mismatch or if the extracted segment
+  fails the 11-char `[A-Za-z0-9_-]{11}` regex.
 
-- **BullMQ Queue** (`src/queues/cardQueue.ts`): `cardQueue` — 3 attempts,
-  exponential backoff (1 s base), 100-entry rolling retention.
+- **YouTube API client** (`src/lib/youtubeClient.ts`): `fetchVideoMetadata(videoId)`
+  makes two sequential calls via native `fetch` (no `googleapis`/`axios`):
+  - `videos.list` — `snippet,contentDetails,statistics,status` — maps all
+    `VideoMetadata` required fields; rejects if `items` empty (`notFound`) or
+    `durationSeconds > 90` (`videoTooLong`).
+  - `channels.list` — resolves `creatorHandle` from `snippet.customUrl` with
+    a lowercase/stripped fallback for channels without a handle; constructs
+    `channelUrl` accordingly.
 
-- **BullMQ Worker** (`src/workers/cardWorker.ts`): `createCardWorker()` returns
-  a worker (concurrency 2). Stub processor logs and returns. Event handlers on
-  `active` / `completed` / `failed` advance the stored `Job` state machine.
-
-- **Config tightening** (`src/config/index.ts`): `REDIS_URL` required in
-  production; process exits with a readable message if absent.
-
-- **Redis rate limiter** (`src/app.ts`): `express-rate-limit` memory store
-  replaced with `RedisStore` from `rate-limit-redis@4`. ioredis's `.call()`
-  is accessed via a type-cast (exists at runtime, absent from `.d.ts`).
-
-- **Health endpoint** (`src/routes/health.ts`): now PINGs Redis and returns
-  `{ redis: "ok" | "error" }`. Returns `status: "degraded"` if ping fails.
-
-- **Graceful shutdown** (`src/server.ts`): shutdown sequence is
-  `server.close()` → `worker.close()` → `closeRedis()`.
+- **Worker** (`src/workers/cardWorker.ts`): stub replaced. `processCard` now:
+  1. Extracts video ID (throws `INVALID_URL` on null).
+  2. Calls `fetchVideoMetadata` (throws `VIDEO_NOT_FOUND` or `VIDEO_TOO_LONG`
+     on validation failures).
+  3. Persists metadata + advances progress to `{ stage: 'downloading_thumbnail', percent: 33 }`.
+  4. Wraps all `AppError` throws in a catch that calls `updateJob` with `state: 'failed'`
+     before re-throwing so BullMQ records the failure correctly.
 
 ---
 
-## Immediate next steps (Phase 4)
+## Immediate next steps (Phase 5)
 
-Phase 4 delivers the YouTube Data API integration that the worker stub
-currently skips. Read `packages/shared/src/metadata.ts` before starting —
-every field of `VideoMetadata` must be populated; Phase 4 owns all of them.
+Phase 5 delivers the ffmpeg render pipeline. The worker currently halts at
+`downloading_thumbnail / 33 %` — Phase 5 fills in the rest.
 
-### 4.1 — Config: require `YOUTUBE_API_KEY` in production
+### 5.1 — Thumbnail downloader (`src/lib/thumbnail.ts`)
 
-`YOUTUBE_API_KEY` is already in the Zod schema as `optional`. Add the same
-production guard that was added for `REDIS_URL` in Phase 3:
+Download `metadata.thumbnailUrl` with native `fetch`. Write it to a temp file
+under `os.tmpdir()`. Return the local path. On HTTP error → `AppError.internal()`.
 
-```ts
-if (parsed.data.NODE_ENV === 'production' && !parsed.data.YOUTUBE_API_KEY) {
-  console.error('[config] YOUTUBE_API_KEY is required in production');
-  process.exit(1);
-}
-```
+Use a randomised filename (e.g. `shortstory-thumb-{jobId}.jpg`) to avoid
+collisions under concurrency 2.
 
-### 4.2 — Video ID extractor (`src/lib/youtubeUrl.ts`)
+### 5.2 — Card renderer (`src/lib/cardRenderer.ts`)
 
-Extract the video ID from these URL forms:
+Produce a 1080×1920 JPEG using ffmpeg. The card design:
+- Background: solid dark colour (#0F0F0F or similar) or a blurred/scaled
+  version of the thumbnail.
+- Thumbnail inset: centered, scaled to fit ~90 % width.
+- Text overlay (bottom third): channel title, creator handle, video title,
+  view count (if present), "Watch on YouTube" CTA.
 
-| Form | Example |
-|---|---|
-| Shorts canonical | `https://www.youtube.com/shorts/{id}` |
-| Short redirect | `https://youtu.be/{id}` |
-| Watch URL | `https://www.youtube.com/watch?v={id}` |
+Shell out to ffmpeg using Node's `child_process.execFile` (not `exec`) to avoid
+shell injection. Return the output file path. Clean up the thumbnail temp file
+after the render succeeds or fails (use `finally`).
 
-Return `null` for anything that doesn't match. The caller throws
-`AppError.invalidUrl()` on null. **Do not** attempt to confirm via HTTP
-redirect — extract the ID and let the API call decide if it's a valid Short.
+Font file must be bundled in the repo (no system-font assumption). Use a free
+SIL-licensed font (e.g. Inter or Roboto) checked in to `assets/fonts/`.
 
-The video ID is always 11 characters (`[A-Za-z0-9_-]{11}`). Validate the
-pattern after extraction.
+### 5.3 — Wiring into the worker
 
-### 4.3 — YouTube API client (`src/lib/youtubeClient.ts`)
-
-Use native `fetch` (Node 18+) — do **not** add `googleapis` or `axios`; they
-add weight and CJS complexity that conflicts with NodeNext. Make two sequential
-API calls:
-
-**Call 1 — videos.list** (gets all video-level data):
+Replace the `// TODO(phase-5)` comment in `processCard`:
 
 ```
-GET https://www.googleapis.com/youtube/v3/videos
-  ?part=snippet,contentDetails,statistics,status
-  &id={videoId}
-  &key={YOUTUBE_API_KEY}
+// After metadata fetch + updateJob (progress 33 %):
+// 4. downloadThumbnail(metadata.thumbnailUrl, jobId) → thumbnailPath
+// 5. updateJob(jobId, { progress: { stage: 'rendering_card', percent: 66 } })
+// 6. renderCard({ jobId, thumbnailPath, metadata }) → cardPath
+// 7. updateJob(jobId, { progress: { stage: 'uploading_result', percent: 90 } })
+// 8. TODO(phase-6): upload to S3 and set result
 ```
 
-Map to `VideoMetadata` fields:
+Extend the `AppError` error-code mapping in the catch block if new error
+surfaces appear (e.g. `RENDER_FAILED`).
 
-| API field | `VideoMetadata` field | Notes |
-|---|---|---|
-| `snippet.title` | `title` | — |
-| `snippet.channelTitle` | `channelTitle` | — |
-| `snippet.channelId` | used for Call 2 | stored temporarily |
-| `snippet.publishedAt` | `publishedAt` | already ISO-8601 |
-| `snippet.thumbnails` | `thumbnailUrl` | prefer `maxres`, fall back to `high`, then `medium` |
-| `contentDetails.duration` | `durationSeconds` | parse ISO 8601 duration (e.g. `PT1M30S`) — write a small helper |
-| `statistics.viewCount` | `viewCount` | optional; parse to number |
-| `status.license` | `license` | `"youtube"` or `"creativeCommon"` |
+### 5.4 — Temp-file cleanup
 
-If `items` is empty the video doesn't exist → `AppError.notFound()`.  
-If `durationSeconds > MAX_VIDEO_DURATION_SECONDS` → `AppError.videoTooLong()`.
-
-**Call 2 — channels.list** (gets the creator handle, required):
-
-```
-GET https://www.googleapis.com/youtube/v3/channels
-  ?part=snippet
-  &id={channelId}
-  &key={YOUTUBE_API_KEY}
-```
-
-`snippet.customUrl` returns the handle, e.g. `"@mrbeast"`. Some older channels
-have no custom URL — in that case fall back to `"@" + snippet.title` (lowercase,
-spaces stripped) so `creatorHandle` is always non-empty. Construct `channelUrl`
-as `"https://www.youtube.com/" + snippet.customUrl` (or
-`"https://www.youtube.com/channel/" + channelId` if no custom URL).
-
-Also construct `shortUrl` as `"https://www.youtube.com/shorts/" + videoId`.
-
-### 4.4 — Wire into the worker (`src/workers/cardWorker.ts`)
-
-Replace the `// TODO(phase-4)` stub in `processCard`:
-
-```ts
-// 1. Set state to processing / fetching_metadata (already done by 'active' event)
-// 2. Extract video ID from sourceUrl → AppError.invalidUrl() on null
-// 3. Call fetchVideoMetadata(videoId) → populates metadata on the job record
-// 4. updateJob(jobId, { metadata, progress: { stage: 'downloading_thumbnail', percent: 33 } })
-// 5. TODO(phase-5): download thumbnail and render card
-```
-
-On any `AppError` thrown inside the processor, catch it, call `updateJob` with
-`state: 'failed'` and the appropriate `JobErrorCode`, then re-throw so BullMQ
-records the failure correctly.
-
-### 4.5 — Error codes to add to `@shortstory/shared` if needed
-
-`VIDEO_NOT_FOUND` and `METADATA_UNAVAILABLE` are already in `JobErrorCode`.
-No shared-package changes expected unless a new error surface is discovered.
+All temp files (thumbnail, rendered card) must be deleted on both success and
+failure paths. Use `fs.promises.unlink` in `finally` blocks; swallow `ENOENT`
+errors silently (file may already be gone).
 
 ---
 
@@ -178,16 +120,18 @@ packages/shared/src/
   index.ts            re-exports everything
 
 apps/backend/src/
-  config/index.ts         Zod env validation (REDIS_URL required in prod)
+  config/index.ts         Zod env validation (REDIS_URL + YOUTUBE_API_KEY required in prod)
   lib/logger.ts           Pino singleton
   lib/redis.ts            ioredis singleton (getRedis) + bullMQConnection options
   lib/jobStore.ts         saveJob / getJob / updateJob (Redis JSON, 24h TTL)
+  lib/youtubeUrl.ts       extractVideoId() — Shorts/youtu.be/watch → 11-char ID or null
+  lib/youtubeClient.ts    fetchVideoMetadata() — YouTube Data API v3
   types/errors.ts         AppError — factories: badRequest, notFound, invalidUrl,
                           videoTooLong, internal
   middleware/             requestId, requestLogger, errorHandler
   routes/health.ts        GET /health (Node uptime + Redis ping)
   queues/cardQueue.ts     BullMQ Queue<CardJobData>
-  workers/cardWorker.ts   BullMQ Worker; TODO(phase-4) stub in processCard
+  workers/cardWorker.ts   BullMQ Worker; fetches metadata → halts at downloading_thumbnail
   app.ts                  Express factory (Redis rate-limit store)
   server.ts               Entry point + graceful shutdown
 

@@ -57,6 +57,7 @@ Full compliance rationale: `docs/compliance.md`.
 | 1 | Monorepo scaffold; `@shortstory/shared` fully typed (DTOs, job state machine, constants) |
 | 2 | Express foundation: config, logging, errors, middleware, health route, Dockerfile, docker-compose |
 | 3 | Redis (ioredis singleton, job store, Redis rate-limit store), BullMQ queue + worker stub, health Redis ping |
+| 4 | YouTube Data API v3 integration: URL extractor, metadata client (videos.list + channels.list), worker stub replaced with real fetch |
 
 ---
 
@@ -64,8 +65,7 @@ Full compliance rationale: `docs/compliance.md`.
 
 | Issue | Carried to |
 |---|---|
-| `YOUTUBE_API_KEY` is optional in Zod schema | Phase 4 (require in production) |
-| Worker processor is a stub | Phase 4–6 (fill in metadata, render, upload) |
+| Worker halts at `downloading_thumbnail` (33 %) | Phase 5 (thumbnail download + ffmpeg render) |
 
 ---
 
@@ -79,15 +79,17 @@ packages/shared/src/
   index.ts        re-exports everything
 
 apps/backend/src/
-  config/index.ts         Zod env validation (REDIS_URL required in production)
+  config/index.ts         Zod env validation (REDIS_URL + YOUTUBE_API_KEY required in production)
   lib/logger.ts           Pino singleton
   lib/redis.ts            ioredis singleton (getRedis) + bullMQConnection options
   lib/jobStore.ts         saveJob / getJob / updateJob (Redis JSON, 24h TTL)
+  lib/youtubeUrl.ts       extractVideoId() — Shorts/youtu.be/watch URL → 11-char ID or null
+  lib/youtubeClient.ts    fetchVideoMetadata() — YouTube Data API v3 (videos.list + channels.list)
   types/errors.ts         AppError with isOperational flag
   middleware/             requestId, requestLogger, errorHandler
   routes/health.ts        GET /health → { status, version, uptimeSeconds, timestamp, redis }
   queues/cardQueue.ts     BullMQ Queue<CardJobData>
-  workers/cardWorker.ts   BullMQ Worker stub; advances Job state machine
+  workers/cardWorker.ts   BullMQ Worker; fetches metadata, advances to downloading_thumbnail
   app.ts                  Express factory; rate limiter uses RedisStore
   server.ts               Graceful shutdown (worker.close + closeRedis + 10s force-exit)
 

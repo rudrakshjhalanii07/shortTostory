@@ -87,12 +87,24 @@ Tracks phase completion, deliverables, and known issues carried forward.
 
 ---
 
-## Phase 4 — YouTube Data API integration ⬜
+## Phase 4 — YouTube Data API integration ✅
 
-**Target deliverables:**
-- YouTube Data API v3 client
-- `VideoMetadata` fetcher (validates Short, enforces 90s limit)
-- URL parser / video-ID extractor
+**Completed:** Session 3
+
+**Deliverables:**
+
+| File | Purpose |
+|---|---|
+| `src/lib/youtubeUrl.ts` | Extract 11-char video ID from Shorts/youtu.be/watch URLs; returns null on mismatch |
+| `src/lib/youtubeClient.ts` | `fetchVideoMetadata()` — two sequential YouTube Data API v3 calls (videos.list + channels.list) via native fetch; enforces 90s limit; populates all `VideoMetadata` fields |
+| `src/config/index.ts` | `YOUTUBE_API_KEY` required in production (fast-fail on startup) |
+| `src/workers/cardWorker.ts` | Stub replaced; extracts video ID, fetches metadata, persists to job store, advances progress to `downloading_thumbnail` |
+
+**Verified:**
+- `npm run build:shared && npm run typecheck --workspace @shortstory/backend` — 0 errors
+
+**Known issues / carried forward:**
+- Processor halts at `downloading_thumbnail` (33 %) — Phase 5 fills in thumbnail download and ffmpeg render.
 
 ---
 
