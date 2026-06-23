@@ -2,15 +2,46 @@ import { Worker, type Job as BullJob } from 'bullmq';
 import { bullMQConnection } from '../lib/redis.js';
 import { updateJob } from '../lib/jobStore.js';
 import { logger } from '../lib/logger.js';
+import { extractVideoId } from '../lib/youtubeUrl.js';
+import { fetchVideoMetadata } from '../lib/youtubeClient.js';
+import { AppError } from '../types/errors.js';
 import type { CardJobData } from '../queues/cardQueue.js';
+import type { JobErrorCode } from '@shortstory/shared';
 
-// Phase 4 fills in metadata fetch; Phase 5 fills in render; Phase 6 fills in upload.
 async function processCard(bullJob: BullJob<CardJobData>): Promise<void> {
   const { jobId, sourceUrl } = bullJob.data;
-  logger.info({ jobId, sourceUrl }, 'card job processing [stub]');
-  // TODO(phase-4): fetch YouTube metadata
-  // TODO(phase-5): render attribution card with ffmpeg
-  // TODO(phase-6): upload card to S3 and set result on job
+  logger.info({ jobId, sourceUrl }, 'card job processing');
+
+  try {
+    // 1. Extract video ID — throws INVALID_URL on null.
+    const videoId = extractVideoId(sourceUrl);
+    if (!videoId) throw AppError.invalidUrl();
+
+    // 2. Fetch metadata from YouTube Data API v3.
+    const metadata = await fetchVideoMetadata(videoId);
+
+    // 3. Persist metadata and advance progress to next stage.
+    await updateJob(jobId, {
+      metadata,
+      progress: { stage: 'downloading_thumbnail', percent: 33 },
+    });
+
+    // TODO(phase-5): download thumbnail and render card
+    // TODO(phase-6): upload card to S3 and set result on job
+  } catch (err) {
+    // Map AppError → JobErrorCode; collapse anything else to INTERNAL.
+    let code: JobErrorCode = 'INTERNAL';
+    let message = 'An unexpected error occurred.';
+
+    if (err instanceof AppError && err.isOperational) {
+      code = err.code as JobErrorCode;
+      message = err.message;
+    }
+
+    await updateJob(jobId, { state: 'failed', error: { code, message } });
+    // Re-throw so BullMQ records the failure and triggers the 'failed' event.
+    throw err;
+  }
 }
 
 export function createCardWorker(): Worker<CardJobData> {
@@ -33,12 +64,6 @@ export function createCardWorker(): Worker<CardJobData> {
   });
 
   worker.on('failed', (job, err) => {
-    if (job) {
-      void updateJob(job.data.jobId, {
-        state: 'failed',
-        error: { code: 'INTERNAL', message: 'Job processing failed.' },
-      });
-    }
     logger.error({ jobId: job?.data.jobId, err }, 'card job failed');
   });
 

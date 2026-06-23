@@ -40,6 +40,11 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.REDIS_URL) {
   process.exit(1);
 }
 
+if (parsed.data.NODE_ENV === 'production' && !parsed.data.YOUTUBE_API_KEY) {
+  console.error('[config] YOUTUBE_API_KEY is required in production');
+  process.exit(1);
+}
+
 const result = parsed;
 
 export const config = result.data;
