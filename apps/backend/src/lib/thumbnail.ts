@@ -12,7 +12,13 @@ export async function downloadThumbnail(url: string, jobId: string): Promise<str
 
   let res: Response;
   try {
-    res = await fetch(url);
+    // Best-effort revalidation hint. YouTube serves thumbnails at a stable path
+    // (e.g. maxresdefault.jpg) so a changed thumbnail keeps the same URL; the
+    // i.ytimg.com CDN may serve a stale copy for hours. These headers ask the
+    // edge to revalidate — frequently ignored, but cheap and can't hurt.
+    res = await fetch(url, {
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    });
   } catch (cause) {
     throw AppError.internal(`Thumbnail fetch failed: ${String(cause)}`);
   }

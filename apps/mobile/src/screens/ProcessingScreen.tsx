@@ -78,6 +78,9 @@ export default function ProcessingScreen({ navigation, route }: Props) {
             },
           );
         }
+        // Reset to Home so returning from Instagram (incl. "Discard") lands on
+        // the home screen, not this now-stale spinner.
+        navigation.navigate('Home');
       } catch {
         Alert.alert(
           'Share failed',

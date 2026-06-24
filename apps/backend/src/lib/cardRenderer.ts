@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile);
 const ASSETS_DIR = fileURLToPath(new URL('../../assets/fonts', import.meta.url));
 const FONT_REGULAR = join(ASSETS_DIR, 'Inter-Regular.ttf');
 const FONT_BOLD = join(ASSETS_DIR, 'Inter-Bold.ttf');
+const LOGO_PATH = fileURLToPath(new URL('../../assets/logo.png', import.meta.url));
 
 // Card: 1080×1920  (Instagram Story 9:16)
 const W = 1080;
@@ -38,7 +39,23 @@ const VIEWS_LH         = 34;
 const GAP_VIEWS_CTA    = 40;
 const CTA_H            = 44;
 
-const FOOTER_Y = H - 96;
+// Branding lockup (logo + "ShortToStory"), centered horizontally and kept well
+// inside Instagram's bottom safe zone so the caption/sticker bar can't cover it.
+// Instagram reserves roughly the bottom ~250 px for its own UI, so the old
+// H-96 footer sat squarely under the caption box — we raise it to H-300.
+const BRAND_TEXT = 'shortToStory';
+const BRAND_FONTSIZE = 38;
+const LOGO_SIZE = 56;
+const BRAND_GAP = 16;
+// Measured width of "ShortToStory" in Inter-Bold @38 px (constant string).
+const BRAND_TEXT_W = 256;
+const BRAND_LOCKUP_W = LOGO_SIZE + BRAND_GAP + BRAND_TEXT_W;
+const BRAND_X = Math.round((W - BRAND_LOCKUP_W) / 2);
+const BRAND_Y = H - 300;
+const LOGO_X = BRAND_X;
+const TEXT_X = BRAND_X + LOGO_SIZE + BRAND_GAP;
+// Vertically center the logo against the text's cap height.
+const LOGO_Y = BRAND_Y - Math.round((LOGO_SIZE - BRAND_FONTSIZE) / 2);
 
 export interface RenderCardInput {
   jobId: string;
@@ -204,17 +221,22 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
       `x=(w-text_w)/2:y=${ctaY}:fontsize=34:fontcolor=0xFF3333[${NL()}]`,
   );
 
-  // ── Footer watermark — bottom-right, white, larger ──
+  // ── Branding lockup — logo + "ShortToStory", centered in the safe zone ──
+  // Scale the logo from the 2nd input, draw the brand text, then overlay the
+  // logo to its left as a single centered lockup.
+  filters.push(`[1:v]scale=${LOGO_SIZE}:${LOGO_SIZE}[logo]`);
   filters.push(
-    `[${L()}]drawtext=fontfile='${FONT_BOLD}':text='ShortToStory':` +
-      `x=w-text_w-${ACCENT_W}:y=${FOOTER_Y}:fontsize=34:fontcolor=0xFFFFFF[${NL()}]`,
+    `[${L()}]drawtext=fontfile='${FONT_BOLD}':text='${esc(BRAND_TEXT)}':` +
+      `x=${TEXT_X}:y=${BRAND_Y}:fontsize=${BRAND_FONTSIZE}:fontcolor=0xFFFFFF[${NL()}]`,
   );
+  filters.push(`[${L()}][logo]overlay=x=${LOGO_X}:y=${LOGO_Y}[${NL()}]`);
 
   const filterComplex = filters.join(';');
 
   const args = [
     '-y',
     '-i', thumbnailPath,
+    '-i', LOGO_PATH,
     '-filter_complex', filterComplex,
     '-map', `[${L()}]`,
     '-frames:v', '1',
