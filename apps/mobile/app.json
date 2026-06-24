@@ -63,22 +63,21 @@
             "BROWSABLE",
             "DEFAULT"
           ]
-        },
-        {
-          "action": "SEND",
-          "data": [
-            {
-              "mimeType": "text/plain"
-            }
-          ],
-          "category": [
-            "DEFAULT"
-          ]
         }
       ]
     },
     "plugins": [
-      "./plugins/withInstagramQueries"
+      "./plugins/withInstagramQueries",
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true
+          },
+          "androidIntentFilters": ["text/*"]
+        }
+      ]
     ],
     "extra": {
       "apiUrl": "http://localhost:3000",

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   StyleSheet,
   Text,
@@ -12,7 +11,6 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import { parseShortStoryUrl } from '../lib/parseDeepLink';
-import { createJob } from '../api/client';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -21,15 +19,11 @@ export default function HomeScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Warm start: URL arrived via the Linking listener in App.tsx and was
-    // forwarded here as a navigation param.
     const incomingUrl = route.params?.incomingUrl;
     if (incomingUrl) {
       setUrl(incomingUrl);
       return;
     }
-
-    // Cold start: app was launched directly by the share extension deep link.
     Linking.getInitialURL()
       .then((initial) => {
         if (!initial) return;
@@ -39,21 +33,11 @@ export default function HomeScreen({ navigation, route }: Props) {
       .catch(() => undefined);
   }, [route.params?.incomingUrl]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const trimmed = url.trim();
-    if (!trimmed) return;
+    if (!trimmed || loading) return;
     setLoading(true);
-    try {
-      const { jobId, pollIntervalMs } = await createJob(trimmed);
-      navigation.navigate('Processing', { jobId, pollIntervalMs });
-    } catch (err) {
-      Alert.alert(
-        'Error',
-        err instanceof Error ? err.message : 'Failed to create job',
-      );
-    } finally {
-      setLoading(false);
-    }
+    navigation.navigate('Processing', { url: trimmed });
   };
 
   return (
@@ -70,14 +54,14 @@ export default function HomeScreen({ navigation, route }: Props) {
         autoCorrect={false}
         keyboardType="url"
         returnKeyType="go"
-        onSubmitEditing={() => void handleSubmit()}
+        onSubmitEditing={handleSubmit}
       />
       {loading ? (
         <ActivityIndicator size="large" color="#E1306C" />
       ) : (
         <TouchableOpacity
           style={styles.button}
-          onPress={() => void handleSubmit()}
+          onPress={handleSubmit}
           activeOpacity={0.85}
         >
           <Text style={styles.buttonText}>Generate</Text>

@@ -1,0 +1,5 @@
+{
+  "buildCommand": "npm run build:shared && npm run build --workspace @shortstory/web",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "npm ci"
+}
