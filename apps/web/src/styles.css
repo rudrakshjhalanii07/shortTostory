@@ -94,6 +94,23 @@ body {
   font-weight: 600;
 }
 
+.install {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+}
+
+.install__done {
+  text-align: center;
+}
+
+.button--install {
+  background: #fff;
+  color: var(--accent);
+  border: 2px solid var(--accent);
+}
+
 .card {
   width: 100%;
   aspect-ratio: 9 / 16;

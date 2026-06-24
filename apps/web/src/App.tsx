@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CardResult } from '@shortstory/shared';
 import { createJob, getJobStatus } from './api';
 import { shareCard, type ShareOutcome } from './share';
+import { InstallButton } from './InstallButton';
 
 type View =
   | { name: 'home' }
@@ -109,6 +110,7 @@ function HomeView({
       <button className="button" type="submit" disabled={loading || !url.trim()}>
         {loading ? 'Generating…' : 'Generate'}
       </button>
+      <InstallButton />
     </form>
   );
 }
