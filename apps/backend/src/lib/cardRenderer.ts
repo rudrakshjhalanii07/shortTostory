@@ -46,12 +46,20 @@ export interface RenderCardInput {
   metadata: VideoMetadata;
 }
 
+/**
+ * Escape a string for use inside ffmpeg's `drawtext=text='...'` (single-quoted).
+ * Two layers matter: (1) drawtext interprets `\` and `%{...}` in the unquoted
+ * value, so backslash and percent are escaped first; (2) the filtergraph parser
+ * strips the surrounding single quotes, so a literal `'` must close-escape-reopen
+ * via the `'\''` idiom (a plain `\'` does NOT work inside single quotes — it ends
+ * the quote and corrupts the rest of the filter). Newlines are flattened.
+ */
 function esc(s: string): string {
   return s
+    .replace(/\r?\n/g, ' ')
     .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/:/g, '\\:')
-    .replace(/,/g, '\\,');
+    .replace(/%/g, '\\%')
+    .replace(/'/g, "'\\''");
 }
 
 function truncate(s: string, max: number): string {
@@ -215,10 +223,18 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
   ];
 
   try {
-    await execFileAsync('ffmpeg', args);
+    await execFileAsync('ffmpeg', args, { maxBuffer: 16 * 1024 * 1024 });
   } catch (cause) {
-    const msg = cause instanceof Error ? cause.message : String(cause);
-    throw AppError.internal(`ffmpeg render failed: ${msg}`);
+    // execFile rejects with an Error carrying `stderr` — that holds ffmpeg's
+    // actual diagnostic. `cause.message` is only the generic "Command failed"
+    // line, so surface stderr (last lines) to make production failures legible.
+    const stderr =
+      cause && typeof cause === 'object' && 'stderr' in cause
+        ? String((cause as { stderr: unknown }).stderr)
+        : '';
+    const tail = stderr.trim().split('\n').slice(-8).join('\n');
+    const base = cause instanceof Error ? cause.message : String(cause);
+    throw AppError.internal(`ffmpeg render failed: ${base}${tail ? `\n${tail}` : ''}`);
   }
 
   return outputPath;

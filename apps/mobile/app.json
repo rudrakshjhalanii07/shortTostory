@@ -1,18 +1,21 @@
 {
   "expo": {
-    "name": "ShortStory",
+    "name": "ShortToStory",
     "slug": "shortstory",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "shortstory",
     "splash": {
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#14141a"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.shortstory.app",
+      "icon": "./assets/icon.png",
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
           "youtube",
@@ -24,6 +27,10 @@
     },
     "android": {
       "package": "com.shortstory.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#14141a"
+      },
       "intentFilters": [
         {
           "action": "VIEW",
