@@ -1,12 +1,31 @@
 # ShortStory — Caddy reverse-proxy configuration
 #
 # Production (HTTPS with auto Let's Encrypt):
-#   Set DOMAIN=api.yourdomain.com in the environment before starting.
+#   Set DOMAIN=yourdomain.com in the environment before starting.
 #   Caddy negotiates a certificate automatically; no manual cert management.
 #
 # Local / staging without a domain (plain HTTP):
 #   Replace {$DOMAIN} with :80  (or the specific IP/port you want to bind).
 #
+# Routing:
+#   /api/*      → backend Express API
+#   /uploads/*  → backend static file server (local-uploader cards)
+#   everything else → PWA (nginx serving Vite dist/)
+#
 {$DOMAIN} {
-    reverse_proxy backend:3000
+    # API and uploaded card assets go to the Express backend.
+    handle /api/* {
+        reverse_proxy backend:3000
+    }
+
+    handle /uploads/* {
+        reverse_proxy backend:3000
+    }
+
+    # All other paths (including /manifest.webmanifest, /sw.js, /icons/*)
+    # are served by the nginx PWA container. Same-origin means the PWA's
+    # fetch('/api/v1/jobs') and the card image fetch both work without CORS.
+    handle {
+        reverse_proxy web:80
+    }
 }

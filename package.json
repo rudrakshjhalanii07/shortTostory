@@ -10,7 +10,8 @@
   "workspaces": [
     "packages/*",
     "apps/backend",
-    "apps/mobile"
+    "apps/mobile",
+    "apps/web"
   ],
   "scripts": {
     "build:shared": "npm run build --workspace @shortstory/shared",
