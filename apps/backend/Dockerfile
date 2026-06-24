@@ -47,8 +47,6 @@ COPY --from=builder /app/apps/backend/dist     ./apps/backend/dist
 # Font assets are referenced at runtime by cardRenderer (not compiled into dist).
 COPY apps/backend/assets                       ./apps/backend/assets
 
-RUN mkdir -p /app/uploads && chown appuser:appgroup /app/uploads
-
 USER appuser
 
 EXPOSE 3000
