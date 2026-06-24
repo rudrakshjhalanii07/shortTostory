@@ -1,4 +1,4 @@
-import { MAX_VIDEO_DURATION_SECONDS, type VideoMetadata, type YouTubeLicense } from '@shortstory/shared';
+import { type VideoMetadata, type YouTubeLicense } from '@shortstory/shared';
 import { config } from '../config/index.js';
 import { AppError } from '../types/errors.js';
 
@@ -86,9 +86,6 @@ export async function fetchVideoMetadata(videoId: string): Promise<VideoMetadata
   }
 
   const durationSeconds = parseIsoDuration(item.contentDetails.duration);
-  if (durationSeconds > MAX_VIDEO_DURATION_SECONDS) {
-    throw AppError.videoTooLong();
-  }
 
   const { snippet, statistics, status } = item;
   const channelId = snippet.channelId;

@@ -44,11 +44,8 @@ export interface VideoMetadata {
   readonly thumbnailUrl: string;
   /** License as reported by the API; gates future full-video models. */
   readonly license: YouTubeLicense;
-  /** Duration in seconds; used to enforce the 90s policy limit. */
+  /** Duration in seconds. */
   readonly durationSeconds: number;
 }
 
 export type YouTubeLicense = 'youtube' | 'creativeCommon';
-
-/** Hard product limit: Shorts longer than this are rejected. */
-export const MAX_VIDEO_DURATION_SECONDS = 90;
