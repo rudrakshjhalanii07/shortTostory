@@ -5,7 +5,7 @@ import { AppError } from '../../types/errors.js';
 import type { IUploader, UploadResult } from './types.js';
 
 // /tmp is always writable in containers; process.cwd() may not be.
-export const UPLOADS_DIR = join(process.env.UPLOADS_DIR ?? '/tmp/uploads');
+export const UPLOADS_DIR = process.env['UPLOADS_DIR'] ?? '/tmp/uploads';
 
 export class LocalUploader implements IUploader {
   async upload(cardPath: string, jobId: string): Promise<UploadResult> {
