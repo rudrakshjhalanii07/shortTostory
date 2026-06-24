@@ -70,8 +70,14 @@ export function createApp({ jobStore, jobQueue }: AppDeps): express.Application 
   app.use(express.json({ limit: '16kb' }));
 
   // Serve rendered cards directly when running without S3 (local/dev mode).
+  // Cross-Origin-Resource-Policy must be 'cross-origin' so browsers on other
+  // origins (e.g. the Vercel PWA) can load the card image in an <img> tag.
+  // Helmet defaults to 'same-origin' which would block cross-origin image loads.
   if (!config.S3_BUCKET) {
-    app.use('/uploads', express.static(UPLOADS_DIR));
+    app.use('/uploads', (_req, res, next) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      next();
+    }, express.static(UPLOADS_DIR));
   }
 
   app.use(healthRouter);
