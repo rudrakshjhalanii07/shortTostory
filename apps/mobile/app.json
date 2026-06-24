@@ -14,13 +14,13 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.shortstory.app",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["youtube", "youtube-x-callback"]
+        "LSApplicationQueriesSchemes": [
+          "youtube",
+          "youtube-x-callback"
+        ]
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
-      },
       "package": "com.shortstory.app",
       "intentFilters": [
         {
@@ -32,7 +32,10 @@
               "host": "share"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -47,7 +50,10 @@
               "host": "youtu.be"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "SEND",
@@ -56,12 +62,17 @@
               "mimeType": "text/plain"
             }
           ],
-          "category": ["DEFAULT"]
+          "category": [
+            "DEFAULT"
+          ]
         }
       ]
     },
     "extra": {
-      "apiUrl": "http://localhost:3000"
+      "apiUrl": "http://localhost:3000",
+      "eas": {
+        "projectId": "bfd6767a-1a3c-4099-b448-c99a1e1b2cf7"
+      }
     }
   }
 }
