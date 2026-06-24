@@ -20,15 +20,6 @@ export default function ResultScreen({ route }: Props) {
   const [sharing, setSharing] = useState(false);
 
   const handleShare = useCallback(async () => {
-    const canOpen = await Linking.canOpenURL('instagram://app');
-    if (!canOpen) {
-      Alert.alert(
-        'Instagram not installed',
-        'Install Instagram to share your Story.',
-      );
-      return;
-    }
-
     setSharing(true);
     const localPath = `${FileSystem.cacheDirectory}card_${Date.now()}.jpg`;
     try {
@@ -37,6 +28,14 @@ export default function ResultScreen({ route }: Props) {
         `instagram-stories://share` +
         `?backgroundImage=${encodeURIComponent(localPath)}` +
         `&contentURL=${encodeURIComponent(attributionLinkUrl)}`;
+      const canOpen = await Linking.canOpenURL(storyUrl);
+      if (!canOpen) {
+        Alert.alert(
+          'Instagram not installed',
+          'Install Instagram to share your Story.',
+        );
+        return;
+      }
       await Linking.openURL(storyUrl);
     } catch {
       Alert.alert('Share failed', 'Could not open Instagram. Please try again.');

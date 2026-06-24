@@ -16,12 +16,18 @@
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
           "youtube",
-          "youtube-x-callback"
+          "youtube-x-callback",
+          "instagram",
+          "instagram-stories"
         ]
       }
     },
     "android": {
       "package": "com.shortstory.app",
+      "queries": [
+        { "scheme": "instagram" },
+        { "scheme": "instagram-stories" }
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
