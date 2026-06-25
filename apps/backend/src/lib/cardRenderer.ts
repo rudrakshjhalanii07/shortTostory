@@ -65,17 +65,26 @@ export interface RenderCardInput {
 
 /**
  * Escape a string for use inside ffmpeg's `drawtext=text='...'` (single-quoted).
- * Two layers matter: (1) drawtext interprets `\` and `%{...}` in the unquoted
- * value, so backslash and percent are escaped first; (2) the filtergraph parser
- * strips the surrounding single quotes, so a literal `'` must close-escape-reopen
- * via the `'\''` idiom (a plain `\'` does NOT work inside single quotes — it ends
- * the quote and corrupts the rest of the filter). Newlines are flattened.
+ * Three layers matter:
+ *  (1) drawtext interprets `\` and `%{...}` in the value, so backslash and
+ *      percent are escaped first.
+ *  (2) the filtergraph parser strips the surrounding single quotes, so the
+ *      content reaches the filter-OPTION parser unquoted — where `:` is the
+ *      option separator. A title like "Kabir Singh : The Revisit" would
+ *      otherwise be read as `text=Kabir Singh ` + bogus option `The Revisit`.
+ *      So `:` must be escaped to `\:` (the `\` survives the single quotes and
+ *      reaches the option parser literally). `[` and `]` do NOT need escaping —
+ *      they're filtergraph-level separators and the single quotes protect them.
+ *  (3) a literal `'` must close-escape-reopen via the `'\''` idiom (a plain `\'`
+ *      does NOT work inside single quotes — it ends the quote and corrupts the
+ *      rest of the filter). Newlines are flattened.
  */
 function esc(s: string): string {
   return s
     .replace(/\r?\n/g, ' ')
     .replace(/\\/g, '\\\\')
     .replace(/%/g, '\\%')
+    .replace(/:/g, '\\:')
     .replace(/'/g, "'\\''");
 }
 
