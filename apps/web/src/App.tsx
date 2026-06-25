@@ -66,6 +66,14 @@ export function App() {
   );
 }
 
+// Extract a YouTube URL from Web Share Target query params (?text=… or ?url=…).
+// Android passes the shared content here when the user picks the PWA from the
+// share sheet.
+function getSharedUrl(): string {
+  const p = new URLSearchParams(window.location.search);
+  return p.get('text') ?? p.get('url') ?? '';
+}
+
 function HomeView({
   onSubmitted,
   onError,
@@ -73,8 +81,25 @@ function HomeView({
   onSubmitted: (jobId: string, pollIntervalMs: number) => void;
   onError: (msg: string) => void;
 }) {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(() => getSharedUrl());
   const [loading, setLoading] = useState(false);
+
+  // Auto-submit immediately when the app is opened via share intent.
+  useEffect(() => {
+    const shared = getSharedUrl();
+    if (!shared) return;
+    // Clear the query string so a reload doesn't resubmit.
+    window.history.replaceState(null, '', '/');
+    onError('');
+    setLoading(true);
+    createJob(shared)
+      .then(({ jobId, pollIntervalMs }) => onSubmitted(jobId, pollIntervalMs))
+      .catch((err) =>
+        onError(err instanceof Error ? err.message : 'Failed to create job.'),
+      )
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
