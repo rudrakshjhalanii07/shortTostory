@@ -3,6 +3,7 @@ import type { CardResult } from '@shortstory/shared';
 import { createJob, getJobStatus } from './api';
 import { shareCard, type ShareOutcome } from './share';
 import { InstallButton } from './InstallButton';
+import { TrustSection } from './TrustSection';
 
 type View =
   | { name: 'home' }
@@ -111,6 +112,7 @@ function HomeView({
         {loading ? 'Generating…' : 'Generate'}
       </button>
       <InstallButton />
+      <TrustSection />
     </form>
   );
 }

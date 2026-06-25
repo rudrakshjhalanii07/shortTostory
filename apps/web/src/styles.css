@@ -111,6 +111,84 @@ body {
   border: 2px solid var(--accent);
 }
 
+.button--android {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #3ddc84;
+  color: #000;
+  text-decoration: none;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  min-height: 52px;
+  width: 100%;
+}
+
+.trust {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.trust__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trust__links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trust__person,
+.trust__github {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.trust__person:hover,
+.trust__github:hover {
+  color: var(--accent);
+}
+
+.trust__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+  flex-shrink: 0;
+}
+
+.trust__avatar-fallback {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.trust__github svg {
+  flex-shrink: 0;
+}
+
 .card {
   width: 100%;
   aspect-ratio: 9 / 16;
