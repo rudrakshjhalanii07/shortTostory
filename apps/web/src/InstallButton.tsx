@@ -65,7 +65,7 @@ export function InstallButton() {
   return (
     <div className="install">
       <button className="button button--install" onClick={handleClick}>
-        Install app
+        Install web app
       </button>
       {showHelp && !promptEvent && (
         <p className="muted">
@@ -77,7 +77,8 @@ export function InstallButton() {
           ) : (
             <>
               Open your browser menu (<strong>⋮</strong>) and choose{' '}
-              <strong>Install app</strong> or <strong>Add to Home screen</strong>.
+              <strong>Install web app</strong> or{' '}
+              <strong>Add to Home screen</strong>.
             </>
           )}
         </p>

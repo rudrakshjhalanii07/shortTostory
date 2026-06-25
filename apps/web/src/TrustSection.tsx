@@ -7,11 +7,6 @@ const GITHUB_REPO = 'https://github.com/rudrakshjhalanii07/shortTostory';
 const INSTA_URL = 'https://www.instagram.com/rudraksh.jhalani/';
 const INSTA_HANDLE = '@rudraksh.jhalani';
 
-// Drop your profile photo at apps/web/public/icons/rudraksh.jpg to show your
-// DP — Instagram's CDN blocks direct cross-origin loads so it must be a local
-// asset. A placeholder initial is shown until the file is added.
-const DP_URL = '/icons/rudraksh.jpg';
-
 export function TrustSection() {
   return (
     <div className="trust">
@@ -43,7 +38,7 @@ export function TrustSection() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Avatar />
+            <InstagramIcon />
             <span>{INSTA_HANDLE}</span>
           </a>
 
@@ -62,24 +57,28 @@ export function TrustSection() {
   );
 }
 
-function Avatar() {
+function InstagramIcon() {
   return (
-    <>
-      <img
-        className="trust__avatar"
-        src={DP_URL}
-        alt="Rudraksh Jhalani"
-        onError={(e) => {
-          const el = e.currentTarget;
-          el.style.display = 'none';
-          const fallback = el.nextElementSibling as HTMLElement | null;
-          if (fallback) fallback.style.display = 'flex';
-        }}
+    <svg
+      className="trust__avatar"
+      width="32"
+      height="32"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
+      <rect
+        x="2"
+        y="2"
+        width="20"
+        height="20"
+        rx="6"
+        stroke="currentColor"
+        strokeWidth="2"
       />
-      <span className="trust__avatar-fallback" aria-hidden>
-        R
-      </span>
-    </>
+      <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="2" />
+      <circle cx="17.5" cy="6.5" r="1.4" fill="currentColor" />
+    </svg>
   );
 }
 

@@ -18,9 +18,18 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "paths": {
-      "@shortstory/shared": ["../../packages/shared/dist/index.d.ts"]
+      "@shortstory/shared": [
+        "../../packages/shared/dist/index.d.ts"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.d.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ],
+  "extends": "expo/tsconfig.base"
 }

@@ -15,6 +15,7 @@
     "@react-navigation/native-stack": "^6.11.0",
     "@shortstory/shared": "*",
     "expo": "~51.0.28",
+    "expo-dev-client": "~4.0.29",
     "expo-file-system": "~17.0.1",
     "expo-intent-launcher": "~11.0.1",
     "expo-share-intent": "^2.7.0",
