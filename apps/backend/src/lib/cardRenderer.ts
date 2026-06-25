@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,31 +64,6 @@ export interface RenderCardInput {
   metadata: VideoMetadata;
 }
 
-/**
- * Escape a string for use inside ffmpeg's `drawtext=text='...'` (single-quoted).
- * Three layers matter:
- *  (1) drawtext interprets `\` and `%{...}` in the value, so backslash and
- *      percent are escaped first.
- *  (2) the filtergraph parser strips the surrounding single quotes, so the
- *      content reaches the filter-OPTION parser unquoted — where `:` is the
- *      option separator. A title like "Kabir Singh : The Revisit" would
- *      otherwise be read as `text=Kabir Singh ` + bogus option `The Revisit`.
- *      So `:` must be escaped to `\:` (the `\` survives the single quotes and
- *      reaches the option parser literally). `[` and `]` do NOT need escaping —
- *      they're filtergraph-level separators and the single quotes protect them.
- *  (3) a literal `'` must close-escape-reopen via the `'\''` idiom (a plain `\'`
- *      does NOT work inside single quotes — it ends the quote and corrupts the
- *      rest of the filter). Newlines are flattened.
- */
-function esc(s: string): string {
-  return s
-    .replace(/\r?\n/g, ' ')
-    .replace(/\\/g, '\\\\')
-    .replace(/%/g, '\\%')
-    .replace(/:/g, '\\:')
-    .replace(/'/g, "'\\''");
-}
-
 function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + '…';
 }
@@ -134,6 +110,11 @@ function wrapLines(text: string, maxChars: number, maxLines: number): string[] {
  * background with a dark→light vertical gradient. A centered content block
  * (channel identity, clear 960×540 thumbnail, accent line, title, views, CTA)
  * is measured and centered vertically. A "ShortToStory" credit sits bottom-right.
+ *
+ * Text injection: all user-supplied strings go through drawtext's `textfile=`
+ * option (written to a temp file) rather than inline `text=`. This means the
+ * text content never touches filtergraph syntax, so no character — colon,
+ * bracket, quote, emoji, RTL mark — can break the filter.
  */
 export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardInput): Promise<string> {
   const outputPath = join(tmpdir(), `shortstory-card-${jobId}.jpg`);
@@ -144,6 +125,7 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
   const handleLine  = truncate(metadata.creatorHandle, 36);
 
   const hasViews = metadata.viewCount !== undefined;
+  const viewsLine = hasViews ? formatViews(metadata.viewCount!) : '';
 
   // ── Measure the block so we can center it vertically ──
   const blockH =
@@ -165,6 +147,37 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
   let viewsY = 0;
   if (hasViews)             { y += GAP_TITLE_VIEWS; viewsY = y; y += VIEWS_LH; }
   const ctaY = y + GAP_VIEWS_CTA;
+
+  // Write all text strings to temp files so they bypass filtergraph parsing
+  // entirely. The file paths are controlled (/tmp/shortstory-txt-{uuid}-{label}.txt)
+  // and contain no special chars, so they're safe to single-quote in the filter.
+  const textFiles: string[] = [];
+  const tf = async (content: string, label: string): Promise<string> => {
+    const p = join(tmpdir(), `shortstory-txt-${jobId}-${label}.txt`);
+    await writeFile(p, content, 'utf8');
+    textFiles.push(p);
+    return p;
+  };
+
+  const [
+    channelFile,
+    handleFile,
+    ...titleAndRest
+  ] = await Promise.all([
+    tf(channelLine, 'channel'),
+    tf(handleLine, 'handle'),
+    ...titleLines.map((l, i) => tf(l, `title${i}`)),
+    ...(hasViews ? [tf(viewsLine, 'views')] : []),
+    tf('Watch on YouTube →', 'cta'),
+    tf(BRAND_TEXT, 'brand'),
+  ]);
+
+  // Unpack the remaining files in the order they were created above.
+  const titleFiles = titleLines.map((_, i) => titleAndRest[i]!);
+  const afterTitles = titleAndRest.slice(titleLines.length);
+  const viewsFile  = hasViews ? afterTitles[0]! : null;
+  const ctaFile    = hasViews ? afterTitles[1]! : afterTitles[0]!;
+  const brandFile  = hasViews ? afterTitles[2]! : afterTitles[1]!;
 
   const filters: string[] = [];
   let n = 0;
@@ -192,13 +205,13 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
 
   // ── Channel name ──
   filters.push(
-    `[${L()}]drawtext=fontfile='${FONT_BOLD}':text='${esc(channelLine)}':` +
+    `[${L()}]drawtext=fontfile='${FONT_BOLD}':textfile='${channelFile}':` +
       `x=(w-text_w)/2:y=${nameY}:fontsize=46:fontcolor=0xFFFFFF[${NL()}]`,
   );
 
   // ── Creator handle ──
   filters.push(
-    `[${L()}]drawtext=fontfile='${FONT_REGULAR}':text='${esc(handleLine)}':` +
+    `[${L()}]drawtext=fontfile='${FONT_REGULAR}':textfile='${handleFile}':` +
       `x=(w-text_w)/2:y=${handleY}:fontsize=28:fontcolor=0xAAAAAA[${NL()}]`,
   );
 
@@ -208,25 +221,24 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
   );
 
   // ── Video title (1–2 centered lines) ──
-  titleLines.forEach((line, i) => {
+  titleFiles.forEach((file, i) => {
     filters.push(
-      `[${L()}]drawtext=fontfile='${FONT_BOLD}':text='${esc(line)}':` +
+      `[${L()}]drawtext=fontfile='${FONT_BOLD}':textfile='${file}':` +
         `x=(w-text_w)/2:y=${titleY + i * TITLE_LH}:fontsize=40:fontcolor=0xFFFFFF[${NL()}]`,
     );
   });
 
   // ── View count ──
-  if (hasViews) {
-    const viewsLine = formatViews(metadata.viewCount!);
+  if (hasViews && viewsFile) {
     filters.push(
-      `[${L()}]drawtext=fontfile='${FONT_REGULAR}':text='${esc(viewsLine)}':` +
+      `[${L()}]drawtext=fontfile='${FONT_REGULAR}':textfile='${viewsFile}':` +
         `x=(w-text_w)/2:y=${viewsY}:fontsize=26:fontcolor=0x999999[${NL()}]`,
     );
   }
 
   // ── CTA ──
   filters.push(
-    `[${L()}]drawtext=fontfile='${FONT_BOLD}':text='Watch on YouTube →':` +
+    `[${L()}]drawtext=fontfile='${FONT_BOLD}':textfile='${ctaFile}':` +
       `x=(w-text_w)/2:y=${ctaY}:fontsize=34:fontcolor=0xFF3333[${NL()}]`,
   );
 
@@ -235,7 +247,7 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
   // logo to its left as a single centered lockup.
   filters.push(`[1:v]scale=${LOGO_SIZE}:${LOGO_SIZE}[logo]`);
   filters.push(
-    `[${L()}]drawtext=fontfile='${FONT_BOLD}':text='${esc(BRAND_TEXT)}':` +
+    `[${L()}]drawtext=fontfile='${FONT_BOLD}':textfile='${brandFile}':` +
       `x=${TEXT_X}:y=${BRAND_Y}:fontsize=${BRAND_FONTSIZE}:fontcolor=0xFFFFFF[${NL()}]`,
   );
   filters.push(`[${L()}][logo]overlay=x=${LOGO_X}:y=${LOGO_Y}[${NL()}]`);
@@ -266,6 +278,8 @@ export async function renderCard({ jobId, thumbnailPath, metadata }: RenderCardI
     const tail = stderr.trim().split('\n').slice(-8).join('\n');
     const base = cause instanceof Error ? cause.message : String(cause);
     throw AppError.internal(`ffmpeg render failed: ${base}${tail ? `\n${tail}` : ''}`);
+  } finally {
+    await Promise.all(textFiles.map(p => unlink(p).catch(() => {})));
   }
 
   return outputPath;
